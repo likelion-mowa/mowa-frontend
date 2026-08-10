@@ -1,3 +1,5 @@
+# 🎨 [서비스명] Frontend
+
 `[서비스명]`의 사용자 인터페이스와 클라이언트 기능을 담당하는 Frontend Repository입니다.
 
 ## 📌 주요 역할
@@ -138,3 +140,4 @@ style: 아카이브 카드 UI 수정
 * 사진은 Object Storage에 업로드한 후 전달받은 `photoUrl`을 Backend API에 전달합니다.
 * 자동 산책 감지 ON/OFF 및 기록 제안 알림은 MVP에서 클라이언트 로컬 기능으로 처리합니다.
 * API Key와 환경변수는 코드에 직접 작성하지 않습니다.
+
