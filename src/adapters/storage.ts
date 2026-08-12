@@ -1,4 +1,4 @@
-import { toError, type StoragePort, type WalkRecord } from './types';
+import { toError, type StoragePort, type DetectedWalk } from './types';
 
 /**
  * WEB implementation, and the file `tsc` resolves.
@@ -15,9 +15,15 @@ import { toError, type StoragePort, type WalkRecord } from './types';
  * Falls back to an in-memory Map when localStorage is unavailable (Safari with
  * cookies fully blocked, private mode quota errors, SSR during static render).
  */
-const KEY = 'mowa.walks.v1';
+/**
+ * Bumped v1 → v2 when `note` was dropped and `locationSummary` / `candidateId`
+ * were added. The old key is abandoned rather than migrated: a v1 payload would
+ * deserialize into a `DetectedWalk` with two fields missing and no error, and
+ * these rows are throwaway scaffold data.
+ */
+const KEY = 'mowa.walks.v2';
 
-const memory = new Map<string, WalkRecord>();
+const memory = new Map<string, DetectedWalk>();
 
 function canUseLocalStorage(): boolean {
   try {
@@ -32,19 +38,19 @@ function canUseLocalStorage(): boolean {
   }
 }
 
-function readAll(): WalkRecord[] {
+function readAll(): DetectedWalk[] {
   if (!canUseLocalStorage()) return [...memory.values()];
   try {
     const raw = globalThis.localStorage.getItem(KEY);
     if (!raw) return [];
     const parsed: unknown = JSON.parse(raw);
-    return Array.isArray(parsed) ? (parsed as WalkRecord[]) : [];
+    return Array.isArray(parsed) ? (parsed as DetectedWalk[]) : [];
   } catch {
     return [];
   }
 }
 
-function writeAll(records: WalkRecord[]): void {
+function writeAll(records: DetectedWalk[]): void {
   if (!canUseLocalStorage()) {
     memory.clear();
     for (const record of records) memory.set(record.id, record);

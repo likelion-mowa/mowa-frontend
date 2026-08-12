@@ -1,6 +1,6 @@
 import * as SQLite from 'expo-sqlite';
 
-import { toError, type StoragePort, type WalkRecord } from './types';
+import { toError, type StoragePort, type DetectedWalk } from './types';
 
 /**
  * iOS persistence.
@@ -24,14 +24,36 @@ export const storage: StoragePort = {
   async init() {
     try {
       const database = await getDb();
+
+      // `CREATE TABLE IF NOT EXISTS` alone is a trap here: a phone that ran the
+      // previous build already has a `walks` table carrying `note` and lacking
+      // `locationSummary` / `candidateId`. The create would no-op, and every
+      // insert would then fail at runtime on a missing column while the web
+      // build stayed green. PRAGMA user_version makes the upgrade explicit.
+      //
+      // v1 rows are dropped rather than migrated — they are scaffold detections
+      // with no user-visible content, and `note` has no destination now that
+      // the backend removed the column.
+      const { user_version: version } = (await database.getFirstAsync<{ user_version: number }>(
+        'PRAGMA user_version',
+      )) ?? { user_version: 0 };
+
+      if (version < 1) {
+        await database.execAsync(`
+          DROP TABLE IF EXISTS walks;
+          PRAGMA user_version = 1;
+        `);
+      }
+
       await database.execAsync(`
         PRAGMA journal_mode = WAL;
         CREATE TABLE IF NOT EXISTS walks (
-          id           TEXT PRIMARY KEY NOT NULL,
-          startedAtMs  INTEGER NOT NULL,
-          endedAtMs    INTEGER,
-          steps        INTEGER NOT NULL DEFAULT 0,
-          note         TEXT
+          id              TEXT PRIMARY KEY NOT NULL,
+          startedAtMs     INTEGER NOT NULL,
+          endedAtMs       INTEGER,
+          steps           INTEGER NOT NULL DEFAULT 0,
+          locationSummary TEXT,
+          candidateId     TEXT
         );
       `);
       return { ok: true, value: true };
@@ -43,8 +65,9 @@ export const storage: StoragePort = {
   async listWalks() {
     try {
       const database = await getDb();
-      const value = await database.getAllAsync<WalkRecord>(
-        'SELECT id, startedAtMs, endedAtMs, steps, note FROM walks ORDER BY startedAtMs DESC',
+      const value = await database.getAllAsync<DetectedWalk>(
+        `SELECT id, startedAtMs, endedAtMs, steps, locationSummary, candidateId
+         FROM walks ORDER BY startedAtMs DESC`,
       );
       return { ok: true, value };
     } catch (error) {
@@ -56,13 +79,15 @@ export const storage: StoragePort = {
     try {
       const database = await getDb();
       await database.runAsync(
-        `INSERT OR REPLACE INTO walks (id, startedAtMs, endedAtMs, steps, note)
-         VALUES (?, ?, ?, ?, ?)`,
+        `INSERT OR REPLACE INTO walks
+           (id, startedAtMs, endedAtMs, steps, locationSummary, candidateId)
+         VALUES (?, ?, ?, ?, ?, ?)`,
         record.id,
         record.startedAtMs,
         record.endedAtMs,
         record.steps,
-        record.note,
+        record.locationSummary,
+        record.candidateId,
       );
       return { ok: true, value: true };
     } catch (error) {

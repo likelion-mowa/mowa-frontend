@@ -10,6 +10,15 @@ import {
   walkDetector,
   type AdapterResult,
 } from '@/adapters';
+import {
+  COMPANION_LABELS,
+  COMPANIONS,
+  EMOTION_LABELS,
+  EMOTIONS,
+  SITUATION_LABELS,
+  SITUATIONS,
+  endpoints,
+} from '@/api/types';
 import { useDiagnostics } from '@/stores/diagnostics-store';
 
 /**
@@ -271,12 +280,35 @@ export default function SmokeScreen() {
                   startedAtMs: Date.now(),
                   endedAtMs: null,
                   steps: 1234,
-                  note: null,
+                  locationSummary: null,
+                  candidateId: null,
                 }),
               );
               const rows = await run('storage.listWalks', storage.listWalks());
               if (rows) append(`storage rows: ${rows.length}`);
             }}
+          />
+        </Section>
+
+        {/*
+          Renders the code values straight from src/api/types.ts. This exists so
+          the contract module is actually reachable from the web graph — an
+          unimported types file compiles clean and ships nothing, which the
+          bundle grep would then have no way to check.
+        */}
+        <Section title="5 · Backend contract">
+          <Row label="base path" value={endpoints.walkExperiences()} />
+          <Row
+            label="companion"
+            value={COMPANIONS.map((c) => `${c}=${COMPANION_LABELS[c]}`).join(' ')}
+          />
+          <Row
+            label="emotion"
+            value={EMOTIONS.map((e) => `${e}=${EMOTION_LABELS[e]}`).join(' ')}
+          />
+          <Row
+            label="situation"
+            value={SITUATIONS.map((s) => `${s}=${SITUATION_LABELS[s]}`).join(' ')}
           />
         </Section>
 
