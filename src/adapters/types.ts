@@ -88,24 +88,44 @@ export interface LocationPort {
 }
 
 /**
- * Minimal persisted shape. Deliberately does NOT model the diary itself —
- * emotion, companion, situation and photos are product design decisions that
- * belong to the team, not to this scaffold. Extend when that design lands.
+ * A walk the device detected, buffered locally until the server has a
+ * `walk_candidates` row for it.
+ *
+ * This is deliberately NOT a mirror of any backend table. The spec assigns
+ * start/end judgement to the client (docs/backend/api-spec.md 기능 1), so a
+ * detection exists on the device before it exists on the server — this is the
+ * shape that gap needs. The diary itself (title, body, emotions, tags) is never
+ * stored here: it lives in `experience_drafts` / `walk_experiences` and is
+ * typed in `src/api/types.ts`.
+ *
+ * `note` used to be here. The 8/10 design change deleted it from both backend
+ * tables — see docs/backend/design-changes-2026-08-10.md §6. Do not reintroduce it.
  */
-export type WalkRecord = {
+export type DetectedWalk = {
+  /** Generated on-device. NOT the server's `candidateId`. */
   id: string;
   startedAtMs: number;
   endedAtMs: number | null;
+  /**
+   * Client-only. The backend has no steps column anywhere — steps are a
+   * detection signal, not part of the record the user ends up reading.
+   */
   steps: number;
-  note: string | null;
+  /** Sent as `locationSummary` on candidate creation. Max 255 chars server-side. */
+  locationSummary: string | null;
+  /**
+   * The `candidateId` returned by `POST /walk-candidates`, or null while this
+   * detection has not reached the server yet.
+   */
+  candidateId: string | null;
 };
 
 export interface StoragePort {
   /** True when backed by real persistence (SQLite). False for the web mock. */
   readonly isPersistent: boolean;
   init(): Promise<AdapterResult<true>>;
-  listWalks(): Promise<AdapterResult<WalkRecord[]>>;
-  insertWalk(record: WalkRecord): Promise<AdapterResult<true>>;
+  listWalks(): Promise<AdapterResult<DetectedWalk[]>>;
+  insertWalk(record: DetectedWalk): Promise<AdapterResult<true>>;
   clear(): Promise<AdapterResult<true>>;
 }
 

@@ -63,12 +63,16 @@ Run these four gates in order. Never claim work is done without pasting their ou
   `e.g. "Cannot find native module" in console means an adapter leaked.`
 - Gate 3 — web export. `npm run export:web` must exit 0 and write `dist/`.
   `e.g. dist/index.html plus dist/_expo/static/js/web/*.js.`
-- Gate 4 — no native code in the web bundle. Grep the bundle for module specifiers.
-  `e.g. grep -oE "@kingstinct/react-native-healthkit|react-native-nitro-modules|CMPedometer|expo-sqlite/" dist/_expo/static/js/web/*.js`
+- Gate 4 — no native code in the web bundle. `npm run verify:web` exports and checks in one step.
+  `e.g. scripts/check-web-bundle.mjs exits 1 on a leak OR on a missing positive control.`
 - Grep for module specifiers, never for prose.
   `e.g. "healthkit" matches the word HealthKit in UI copy and gives a false positive.`
 - Confirm the split positively, not just negatively.
   `e.g. the web bundle SHOULD contain "HealthKit is only available on iOS." from health.ts.`
+- Decode `\uXXXX` before checking the bundle for Korean copy.
+  `e.g. measured — 생각에 잠긴 ships as \uc0dd\uac01\uc5d0 \uc7a0\uae34, so a raw grep reports a false MISSING.`
+- A types-only module that nothing imports is absent from the bundle and unverifiable.
+  `e.g. src/api/types.ts is reachable only because /debug renders its code values.`
 - Gate 5 — device. `npm run ios` must install and launch on a physical iPhone.
   `e.g. a green simulator build proves nothing about motion or HealthKit.`
 - Never treat a green `tsc` as proof the web build works.
@@ -118,6 +122,10 @@ Run these four gates in order. Never claim work is done without pasting their ou
   `e.g. plugins/with-development-team.js pins the signing team.`
 - Put shared client state in `src/stores/`.
   `e.g. src/stores/diagnostics-store.ts.`
+- Keep the backend contract in `src/api/types.ts`, separate from the adapter ports.
+  `e.g. adapters/types.ts is device capabilities; api/types.ts is what the server sends.`
+- Keep the backend spec itself in `docs/backend/`.
+  `e.g. erd.md, api-spec.md, data-tables.md, design-changes-2026-08-10.md.`
 
 # Code Convention
 
@@ -161,10 +169,22 @@ Run these four gates in order. Never claim work is done without pasting their ou
   `e.g. import { storage } from '@/adapters'.`
 - Persist through `StoragePort` so both platforms compile.
   `e.g. expo-sqlite on iOS, localStorage on web — both survive a reload.`
-- Do not invent product design. Emotion, companion, situation and photos are the team's to specify.
-  `e.g. WalkRecord stays minimal until that design lands.`
+- Do not invent product design. Derive every field, code value and label from `docs/backend/`.
+  `e.g. emotion codes come from api-spec.md §3, not from a guess about the UI.`
+- Treat `docs/backend/` as a mirror, not the origin. Notion is upstream.
+  `e.g. re-export the pages after a backend change instead of hand-editing the markdown.`
+- Model the three backend entities separately; they are not one record.
+  `e.g. walk_candidates → experience_drafts → walk_experiences, each 1:0..1.`
+- Keep client-only fields out of the server contract, and say which they are.
+  `e.g. steps is a detection signal — no backend table has a steps column.`
+- Send instants as ISO 8601 with offset, never epoch milliseconds.
+  `e.g. the detector reports epochMs; convert with toIsoDateTime at the boundary.`
+- Treat `emotions[]` and `tags[]` as whole-array replacements on PATCH.
+  `e.g. omit to keep, [] to clear, a list to replace — there is no partial add.`
 - Use only the async expo-sqlite API, and open the database lazily.
   `e.g. await SQLite.openDatabaseAsync('mowa.db') inside init(), not at module scope.`
+- Bump `PRAGMA user_version` when the SQLite schema changes.
+  `e.g. CREATE TABLE IF NOT EXISTS silently keeps the old columns on an installed device.`
 - Never use expo-sqlite on web.
   `e.g. its web backend is alpha and needs COOP/COEP headers expo export does not emit.`
 - Never infer "permission denied" from an empty HealthKit result.
