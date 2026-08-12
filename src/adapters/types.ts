@@ -14,22 +14,31 @@ export type AdapterResult<T> =
   | { ok: true; value: T }
   | { ok: false; error: string };
 
-export type WalkEvent = {
-  id: string;
-  startedAtMs: number;
-  endedAtMs: number | null;
-  steps: number;
-  source: 'stub' | 'live' | 'retrospective';
-};
+/**
+ * Re-exported from the native module rather than re-declared.
+ *
+ * These used to be declared twice — once here and once in the module — which
+ * meant the two could disagree outright. Now there is one definition.
+ *
+ * `import type` is erased at compile time, so this creates no runtime edge into
+ * `modules/` and cannot pull the native module into the web bundle. It also
+ * bypasses `modules/walk-detector/index.ts`, which re-exports the native default.
+ *
+ * ⚠️ This does NOT make `tsc` catch drift. Measured: adding a field to WalkEvent
+ * still leaves `tsc --noEmit` at exit 0, because no TypeScript code ever
+ * constructs a complete WalkEvent — Swift does, across a `[String: Any]`
+ * boundary with zero compile-time checking. Renaming a field IS caught, since
+ * call sites read it.
+ *
+ * Practical rule when porting the real detector: changing the Swift payload
+ * shape is unverified by every gate in this repo. Check it on device.
+ */
+import type {
+  WalkEvent,
+  WalkDetectorDiagnostics,
+} from '../../modules/walk-detector/src/WalkDetector.types';
 
-export type WalkDetectorDiagnostics = {
-  isPedometerAvailable: boolean;
-  isActivityAvailable: boolean;
-  motionAuthorization: string;
-  systemVersion: string;
-  isSimulator: boolean;
-  isRunning: boolean;
-};
+export type { WalkEvent, WalkDetectorDiagnostics };
 
 export interface WalkDetectorPort {
   readonly isAvailable: boolean;
@@ -78,6 +87,11 @@ export interface LocationPort {
   requestBackgroundPermission(): Promise<AdapterResult<LocationPermission>>;
 }
 
+/**
+ * Minimal persisted shape. Deliberately does NOT model the diary itself —
+ * emotion, companion, situation and photos are product design decisions that
+ * belong to the team, not to this scaffold. Extend when that design lands.
+ */
 export type WalkRecord = {
   id: string;
   startedAtMs: number;

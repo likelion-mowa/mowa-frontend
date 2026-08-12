@@ -15,11 +15,13 @@
  * upstream Expo bug — once it is fixed the script can be deleted, and until
  * then it silently no-ops when the target code is absent.
  *
- * This is NOT registered in `postinstall` by default. It is only needed on
- * Xcode versions that reproduce the bug. If a build fails with the error above,
- * run `npm run patch:jsi`, rebuild, and — if the failure is reproducible for
- * everyone on the team — add it to `postinstall` so it survives `npm install`,
- * and record it in AGENTS.md under Known Traps.
+ * This IS registered in `postinstall` (see package.json), because the bug
+ * reproduces on the pinned Xcode 26.2 toolchain and `npm install` would
+ * otherwise revert the patch and break the next build.
+ *
+ * To retire it: upgrade to Xcode 26.4+, delete
+ * node_modules/expo-modules-jsi/apple/.DerivedData (a stale cache hides the
+ * result), rebuild, and if it is green remove the postinstall entry.
  */
 import { readFileSync, writeFileSync, existsSync } from 'node:fs'
 import { dirname, join } from 'node:path'

@@ -1,0 +1,17 @@
+# Vercel installs dependencies and runs the build itself, so none of these
+# should be uploaded. Without this file the CLI tries to send ~19,000 files and
+# is rejected by the 15,000-file limit.
+
+node_modules
+
+# Generated native projects — irrelevant to the web build.
+# Root-anchored so modules/walk-detector/ios (source, tracked) is NOT excluded.
+/ios
+/android
+
+# Build output — Vercel produces this from buildCommand.
+dist
+.expo
+web-build
+
+.git
