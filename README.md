@@ -84,11 +84,11 @@ npm run dev
 
 ```text
 main
-develop
 feature/{기능명}
 fix/{수정내용}
-refactor/{리팩토링내용}
 ```
+
+> `main`이 통합 브랜치입니다. 작업 브랜치는 항상 최신 `main`에서 생성하고 `main`으로 PR합니다.
 
 예시:
 
@@ -124,8 +124,10 @@ style: 아카이브 카드 UI 수정
 
 ## 🔀 Pull Request
 
-* `develop`을 기준으로 기능 Branch를 생성합니다.
-* 작업 완료 후 `develop`을 대상으로 PR을 생성합니다.
+* 최신 `main`을 기준으로 기능 Branch를 생성합니다.
+* 작업 완료 후 `main`을 대상으로 PR을 생성합니다.
+* PR 제목은 `[Feat] 산책 기록 화면 구현` 형식을 사용합니다.
+* PR 본문은 `## 작업 내용`, `## 확인 사항` 두 섹션으로 작성합니다.
 * PR 생성 전 실행 및 주요 화면을 확인합니다.
 * API 명세 변경이 필요한 경우 백엔드 담당자와 먼저 공유합니다.
 * API Request/Response를 임의로 변경하지 않습니다.

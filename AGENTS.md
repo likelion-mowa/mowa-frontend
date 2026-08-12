@@ -44,6 +44,8 @@ Ship target is a hackathon submission with two deliveries.
   `e.g. always use this for the first build in a fresh clone.`
 - `npm run typecheck` before every commit.
 - `npm run export:web` then `npm run serve:web` to check the real static build.
+- Vercel builds from `vercel.json`; never add an SPA rewrite to it.
+  `e.g. web.output is "static", so rewriting /:path* to / would break every route.`
 - `npm run patch:jsi` only when the iOS build fails to compile expo-modules-jsi.
   `e.g. see Known Traps.`
 - Install CocoaPods from Homebrew, not gem.
@@ -86,6 +88,8 @@ Run these four gates in order. Never claim work is done without pasting their ou
 
 - Put routes in `src/app/`, one file per screen.
   `e.g. src/app/archive.tsx serves /archive.`
+- Keep developer diagnostics on `/debug`, never on `/`.
+  `e.g. the root route is what a hackathon judge opens on the deployed web URL.`
 - Put every native capability behind `src/adapters/`.
   `e.g. src/adapters/health.native.ts.`
 - Name the base file for web and the `.native.ts` file for iOS.
@@ -94,10 +98,16 @@ Run these four gates in order. Never claim work is done without pasting their ou
   `e.g. tsc only ever resolves the base file, so it defines the types for all callers.`
 - Keep all port interfaces in `src/adapters/types.ts`.
   `e.g. export interface StoragePort { ... }.`
-- Adding a native capability means editing three files, never one.
+- Adding a capability backed by an Expo package means editing three files.
   `e.g. types.ts (port) + x.ts (web value) + x.native.ts (real impl).`
-- Annotate both implementations with the port type — this is what makes tsc catch drift.
-  `e.g. export const storage: StoragePort = { ... } in BOTH files, or a one-sided edit compiles.`
+- Adding one backed by a local `modules/` module means five, and Swift is not checked.
+  `e.g. + modules/.../WalkDetectorModule.ts declare class + the Swift AsyncFunction.`
+- Omitting the Swift side still passes `tsc`. It fails only at runtime on device.
+  `e.g. measured — no gate in this repo covers the Swift side of the bridge.`
+- Annotate both implementations with the port type so a one-sided edit cannot compile.
+  `e.g. export const storage: StoragePort = { ... } in BOTH files.`
+- Renaming a shared field is caught by tsc; adding one is not.
+  `e.g. nothing in TS constructs a WalkEvent, so widening the type compiles clean.`
 - Metro never considers `.native.ts` on web, so a native import there is unreachable from the web graph.
   `e.g. web resolves x.web.ts then x.ts; ios resolves x.ios.ts then x.native.ts then x.ts.`
 - Put Swift in `modules/<name>/ios/`.
@@ -150,7 +160,9 @@ Run these four gates in order. Never claim work is done without pasting their ou
 - Let stores call adapters, never native modules.
   `e.g. import { storage } from '@/adapters'.`
 - Persist through `StoragePort` so both platforms compile.
-  `e.g. SQLite on iOS, an in-memory Map on web.`
+  `e.g. expo-sqlite on iOS, localStorage on web — both survive a reload.`
+- Do not invent product design. Emotion, companion, situation and photos are the team's to specify.
+  `e.g. WalkRecord stays minimal until that design lands.`
 - Use only the async expo-sqlite API, and open the database lazily.
   `e.g. await SQLite.openDatabaseAsync('mowa.db') inside init(), not at module scope.`
 - Never use expo-sqlite on web.
@@ -193,10 +205,10 @@ Run these four gates in order. Never claim work is done without pasting their ou
 
 These all present as "it mysteriously stopped working". Check them before debugging code.
 
-- Free-team provisioning profiles expire after 7 days.
-  `e.g. the installed app stops launching with no error message; rebuild to refresh.`
-- A free team allows only 3 apps per device.
-  `e.g. devicectl reports "App installed" while the app is absent from the home screen.`
+- The team is a PAID Apple Developer Program Individual membership, team `X4RZSKR6X3`.
+  `e.g. profiles are valid 1 year; the free-tier 7-day expiry and 3-app cap no longer apply.`
+- Upgrading a free Personal Team keeps the same Team ID, so signing config needs no change.
+  `e.g. plugins/with-development-team.js still pins X4RZSKR6X3 and is correct.`
 - `expo-modules-jsi` 57.0.4 does not compile on Xcode 26.2. Confirmed on this repo, not theoretical.
   `e.g. JavaScriptCodable+Date.swift:53 "type of expression is ambiguous without a type annotation".`
 - The patch is wired into `postinstall` because npm install reverts it and the build then fails.
@@ -213,17 +225,40 @@ These all present as "it mysteriously stopped working". Check them before debugg
   `e.g. any manual Xcode change, including the signing team, is discarded.`
 - Motion & Fitness must be enabled system-wide.
   `e.g. Settings > Privacy & Security > Motion & Fitness > Fitness Tracking.`
+- Entitlement plugins run in REVERSE registration order. Registering last means running first.
+  `e.g. with-no-push-entitlement must stay FIRST in app.json plugins or its delete is a no-op.`
+- That failure is silent: the plugin still runs, just before the key it deletes exists.
+  `e.g. verify after prebuild by grepping the generated entitlements for aps-environment.`
 
 # Git/PR Convention
 
-- Branch from `develop`, never from `main`.
-  `e.g. git switch -c feature/walk-record develop.`
-- Prefix branches with `feature/`, `fix/`, or `refactor/`.
-  `e.g. fix/photo-preview.`
-- Prefix commits with the type used in README.md.
-  `e.g. feat: 감정 선택 화면 구현.`
-- Open pull requests against `develop`.
-- Paste the verification gate output in the PR body.
-  `e.g. tsc exit code, export result, and the bundle grep.`
+Source of truth: the team's `Git 협업 규칙` document. There is no `develop` branch —
+`main` is the integration branch.
+
+- Update `main` before creating any branch.
+  `e.g. git checkout main && git pull origin main.`
+- Branch from the latest `main`, using `feature/{기능명}` or `fix/{수정내용}`.
+  `e.g. git checkout -b feature/walk-record.`
+- Never develop on `main` and never push to it directly.
+  `e.g. every change reaches main through a pull request.`
+- Write commits as `타입: 작업 내용`.
+  `e.g. feat: 산책 기록 화면 구현.`
+- Use only these types: feat, fix, refactor, test, docs, style, chore.
+  `e.g. chore: 프로젝트 의존성 설정.`
+- Keep one meaningful change per commit.
+  `e.g. "수정", "작업 완료", "최종" are not acceptable messages.`
+- Title pull requests `[Feat] …`, `[Fix] …` — bracketed, capitalized.
+  `e.g. [Feat] 산책 기록 화면 구현.`
+- Use the PR body template: `## 작업 내용` then `## 확인 사항`.
+  `e.g. put the verification gate output under 확인 사항.`
+- Scope each PR to one feature or one tracker item.
+- Re-sync `main` after a merge, before starting the next branch.
+  `e.g. git checkout main && git pull origin main.`
+- Delete merged branches.
+  `e.g. git branch -d feature/walk-record.`
+- Announce before editing shared files someone else owns.
+  `e.g. common components, common config, shared types.`
 - Coordinate API request/response changes with the backend before merging.
   `e.g. never change field names unilaterally.`
+- Never commit secrets. Share real values off GitHub.
+  `e.g. .env is gitignored; commit .env.example with the values stripped.`
