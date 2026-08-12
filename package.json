@@ -17,7 +17,8 @@
     "serve:web": "expo serve",
     "deploy": "vercel deploy --prod",
     "deploy:preview": "vercel deploy",
-    "lint": "expo lint"
+    "lint": "expo lint",
+    "verify:web": "expo export --platform web && node scripts/check-web-bundle.mjs"
   },
   "dependencies": {
     "@kingstinct/react-native-healthkit": "^14.0.2",
