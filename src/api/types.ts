@@ -113,7 +113,24 @@ export type ApiFailure = {
   success: false;
   message: string;
   error: {
+    /**
+     * NOT a contract yet — do not branch on this.
+     *
+     * The spec names exactly one code (`INVALID_CREDENTIALS`, on login) and
+     * leaves the rest as a placeholder, so no agreed vocabulary exists. Branch
+     * on the HTTP status instead: the spec does pin 401, 404, 409 and the 400
+     * returned for bad list-query combinations.
+     *
+     * A `switch` on this string would fall through to `default` against a real
+     * backend that chose different names — wrong UI, no error, nothing to
+     * notice. That silence is why this stays `string` instead of a union.
+     *
+     * When the backend publishes its list, add it here as an `as const` array
+     * plus a union, exactly like the code values above, and have the mock
+     * import it. Splitting it later is cheap; depending on it now is not.
+     */
     code: string;
+    /** Human-readable. Safe to log; not stable enough to assert on. */
     detail: string;
   };
 };

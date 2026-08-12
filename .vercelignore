@@ -15,3 +15,7 @@ dist
 web-build
 
 .git
+
+# Dev-only — not part of the web build.
+mock
+docs

@@ -44,6 +44,12 @@ Ship target is a hackathon submission with two deliveries.
   `e.g. always use this for the first build in a fresh clone.`
 - `npm run typecheck` before every commit.
 - `npm run export:web` then `npm run serve:web` to check the real static build.
+- `npm run mock` runs the local mock backend; `npm run mock:test` checks it against the spec.
+  `e.g. http://localhost:4000/api/v1 — accounts and caveats in mock/README.md.`
+- The mock needs Node 22.6+ because it imports `src/api/types.ts` directly.
+  `e.g. --experimental-strip-types is what keeps its code values from drifting from the app's.`
+- The mock is local only. Never point the deployed web build at it.
+  `e.g. a judge's browser resolves localhost to their own machine, and HTTPS blocks http://.`
 - Vercel builds from `vercel.json`; never add an SPA rewrite to it.
   `e.g. web.output is "static", so rewriting /:path* to / would break every route.`
 - `npm run patch:jsi` only when the iOS build fails to compile expo-modules-jsi.
@@ -181,6 +187,10 @@ Run these four gates in order. Never claim work is done without pasting their ou
   `e.g. the detector reports epochMs; convert with toIsoDateTime at the boundary.`
 - Treat `emotions[]` and `tags[]` as whole-array replacements on PATCH.
   `e.g. omit to keep, [] to clear, a list to replace — there is no partial add.`
+- Treat `emotions[]` and `tags[]` as sets. Never compare them by array position.
+  `e.g. the mock sorts by code, but the real backend's row order is not specified.`
+- Branch on the HTTP status, never on `error.code`.
+  `e.g. the spec names one code; a switch on the rest silently hits default and shows wrong UI.`
 - Use only the async expo-sqlite API, and open the database lazily.
   `e.g. await SQLite.openDatabaseAsync('mowa.db') inside init(), not at module scope.`
 - Bump `PRAGMA user_version` when the SQLite schema changes.
