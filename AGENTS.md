@@ -69,6 +69,10 @@ Run these four gates in order. Never claim work is done without pasting their ou
   `e.g. the web bundle SHOULD contain "HealthKit is only available on iOS." from health.ts.`
 - Gate 5 — device. `npm run ios` must install and launch on a physical iPhone.
   `e.g. a green simulator build proves nothing about motion or HealthKit.`
+- Never treat a green `tsc` as proof the web build works.
+  `e.g. expo/tsconfig.base sets customConditions ["react-native"], so tsc types web files natively.`
+- Know what each gate cannot catch. A native import inside a screen passes Gate 1 and fails Gate 4.
+  `e.g. skipping the bundle grep ships a broken web build with a green typecheck.`
 - Re-run `npm run prebuild` after any app.json or plugin change, then re-check the push entitlement.
   `e.g. grep -c aps-environment ios/*/*.entitlements must print 0.`
 - Test permission dialogs only on a fresh install.
@@ -90,6 +94,12 @@ Run these four gates in order. Never claim work is done without pasting their ou
   `e.g. tsc only ever resolves the base file, so it defines the types for all callers.`
 - Keep all port interfaces in `src/adapters/types.ts`.
   `e.g. export interface StoragePort { ... }.`
+- Adding a native capability means editing three files, never one.
+  `e.g. types.ts (port) + x.ts (web value) + x.native.ts (real impl).`
+- Annotate both implementations with the port type — this is what makes tsc catch drift.
+  `e.g. export const storage: StoragePort = { ... } in BOTH files, or a one-sided edit compiles.`
+- Metro never considers `.native.ts` on web, so a native import there is unreachable from the web graph.
+  `e.g. web resolves x.web.ts then x.ts; ios resolves x.ios.ts then x.native.ts then x.ts.`
 - Put Swift in `modules/<name>/ios/`.
   `e.g. modules/walk-detector/ios/WalkDetectorModule.swift.`
 - Reference `modules/` from exactly one place, and only from a `.native.ts` file.
