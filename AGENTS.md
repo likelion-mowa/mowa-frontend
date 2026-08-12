@@ -1,0 +1,219 @@
+# Project Overview
+
+Mowa detects a walk, offers to record it, and turns it into an AI-written diary entry.
+Ship target is a hackathon submission with two deliveries.
+
+- Deliver two builds at all times: a web link as the safety net, an iOS demo video for walk detection.
+  `e.g. breaking web to fix iOS is never an acceptable trade.`
+- Treat iOS as the full product and web as UI-only.
+  `e.g. walk detection, HealthKit, notifications and background location are iOS-only.`
+- Build iOS as an Expo Development Build, never Expo Go.
+  `e.g. Expo Go cannot load modules/walk-detector or HealthKit.`
+- Walk detection logic is not written yet. This repo currently holds the environment and a stub.
+  `e.g. modules/walk-detector returns canned values on purpose.`
+- Read the prior investigation before designing detection.
+  `e.g. /Users/cby/workspace/ios-movement-test/docs/03-findings.md has measured keepalive settings.`
+
+# Stack + Version
+
+- Never bump `expo`, `react-native` or `react` independently of each other.
+  `e.g. expo 57.0.12 / react-native 0.86.2 / react 19.2.3.`
+- Use npm. Never pnpm or yarn.
+  `e.g. pnpm symlinks silently made Tailwind emit zero utility classes in the prior repo.`
+- Keep Tailwind on v3.
+  `e.g. tailwindcss 3.4.19 — react-native-css-interop 0.2.6 declares peer "~3".`
+- Keep NativeWind on v4, not the v5 preview.
+  `e.g. nativewind 4.2.6 — v5 has an open web-export blocker.`
+- Keep `react-native-nitro-modules` pinned exactly.
+  `e.g. 0.35.10 exact, because HealthKit 14.0.2 generates against nitrogen ^0.35.0.`
+- Keep TypeScript on 5.9.
+  `e.g. typescript ~5.9.3, not the SDK 57 template's ~6.0.3.`
+- Install Expo SDK packages with `expo install`, not `npm install`.
+  `e.g. npx expo install expo-sqlite picks the version matching the SDK.`
+- Do not add `newArchEnabled` to app.json.
+  `e.g. the New Architecture is mandatory in SDK 55+ and the flag is a no-op.`
+
+# Execute Commands
+
+- `npm start` runs the dev server; `npm run web` runs it on web.
+- `npm run prebuild` regenerates `ios/` and then strips the push entitlement.
+  `e.g. run it after any change to app.json, a plugin, or modules/.`
+- `npm run ios` builds and installs onto the connected iPhone.
+  `e.g. npm run ios → installs Mowa on device "by".`
+- `npm run ios:clean` when unsure. It prebuilds first, then runs.
+  `e.g. always use this for the first build in a fresh clone.`
+- `npm run typecheck` before every commit.
+- `npm run export:web` then `npm run serve:web` to check the real static build.
+- `npm run patch:jsi` only when the iOS build fails to compile expo-modules-jsi.
+  `e.g. see Known Traps.`
+- Install CocoaPods from Homebrew, not gem.
+  `e.g. brew install cocoapods → 1.17.0; gem's bindir is not on PATH.`
+- `npm run ios` prompts for a device. Pass the UDID to run it non-interactively.
+  `e.g. npx expo run:ios --device 00008140-0005150A1E93001C.`
+
+# Verification Loop
+
+Run these four gates in order. Never claim work is done without pasting their output.
+
+- Gate 1 — types. `npx tsc --noEmit` must exit 0.
+  `e.g. run npx expo start once first, or expo-env.d.ts is missing and errors are spurious.`
+- Gate 2 — web renders. `npm run web`, then confirm the browser console is empty.
+  `e.g. "Cannot find native module" in console means an adapter leaked.`
+- Gate 3 — web export. `npm run export:web` must exit 0 and write `dist/`.
+  `e.g. dist/index.html plus dist/_expo/static/js/web/*.js.`
+- Gate 4 — no native code in the web bundle. Grep the bundle for module specifiers.
+  `e.g. grep -oE "@kingstinct/react-native-healthkit|react-native-nitro-modules|CMPedometer|expo-sqlite/" dist/_expo/static/js/web/*.js`
+- Grep for module specifiers, never for prose.
+  `e.g. "healthkit" matches the word HealthKit in UI copy and gives a false positive.`
+- Confirm the split positively, not just negatively.
+  `e.g. the web bundle SHOULD contain "HealthKit is only available on iOS." from health.ts.`
+- Gate 5 — device. `npm run ios` must install and launch on a physical iPhone.
+  `e.g. a green simulator build proves nothing about motion or HealthKit.`
+- Re-run `npm run prebuild` after any app.json or plugin change, then re-check the push entitlement.
+  `e.g. grep -c aps-environment ios/*/*.entitlements must print 0.`
+- Test permission dialogs only on a fresh install.
+  `e.g. delete the app from the phone first; iOS shows each prompt once.`
+- Verify walk detection on hardware only.
+  `e.g. the simulator has no motion coprocessor and an empty HealthKit store.`
+- Log every suppressed or skipped path.
+  `e.g. silent failure was the single most expensive failure class in the prior repo.`
+
+# Directory Structure & File Placement Rule
+
+- Put routes in `src/app/`, one file per screen.
+  `e.g. src/app/archive.tsx serves /archive.`
+- Put every native capability behind `src/adapters/`.
+  `e.g. src/adapters/health.native.ts.`
+- Name the base file for web and the `.native.ts` file for iOS.
+  `e.g. storage.ts is the in-memory mock, storage.native.ts is SQLite.`
+- Make the base file a real module, never a declaration stub.
+  `e.g. tsc only ever resolves the base file, so it defines the types for all callers.`
+- Keep all port interfaces in `src/adapters/types.ts`.
+  `e.g. export interface StoragePort { ... }.`
+- Put Swift in `modules/<name>/ios/`.
+  `e.g. modules/walk-detector/ios/WalkDetectorModule.swift.`
+- Reference `modules/` from exactly one place, and only from a `.native.ts` file.
+  `e.g. walk-detector.native.ts imports '../../modules/walk-detector'.`
+- Put native build configuration in `app.json` or `plugins/`.
+  `e.g. plugins/with-development-team.js pins the signing team.`
+- Put shared client state in `src/stores/`.
+  `e.g. src/stores/diagnostics-store.ts.`
+
+# Code Convention
+
+- Keep TypeScript strict and avoid `any` in `src/`.
+  `e.g. take unknown and narrow it with a type guard.`
+- Name files in kebab-case and components in PascalCase.
+  `e.g. walk-card.tsx exports WalkCard.`
+- Import app code through the `@/` alias.
+  `e.g. import { walkDetector } from '@/adapters'.`
+- Annotate every adapter export with its port type.
+  `e.g. export const storage: StoragePort = { ... }.`
+- Return results from adapters; never throw for "unsupported".
+  `e.g. return { ok: false, error: 'HealthKit is only available on iOS.' }.`
+- Wrap every native call in try/catch and normalize the error.
+  `e.g. catch (error) { return toError(error) }.`
+- Write comments that explain why, in English.
+  `e.g. // CoreMotion has no permission API; issuing a query IS the prompt.`
+
+# Styling Rule
+
+- Style with NativeWind `className`, not `StyleSheet`.
+  `e.g. <View className="flex-1 px-4" />.`
+- Use Tailwind v3 syntax only.
+  `e.g. v4's @theme and CSS-first config will not compile.`
+- Import `global.css` exactly once, in the root layout.
+  `e.g. src/app/_layout.tsx imports '../../global.css'.`
+- Add new source directories to the Tailwind `content` globs or their classes are dropped.
+  `e.g. content: ['./src/**/*.{js,jsx,ts,tsx}'].`
+- Define colors in the Tailwind theme instead of inlining hex values.
+  `e.g. className="bg-walk" resolves to #3F8F5A.`
+- Avoid `transition-*` and `animate-*` classes until someone verifies them on device.
+  `e.g. NativeWind 4.2.6 with Reanimated 4.5.1 is unproven here.`
+- Ignore the broken LogBox rendering in development.
+  `e.g. nativewind#1834 on RN 0.86 — cosmetic, dev-only, production is unaffected.`
+
+# Data/State Rule
+
+- Keep client state in Zustand, one store per domain.
+  `e.g. src/stores/diagnostics-store.ts.`
+- Let stores call adapters, never native modules.
+  `e.g. import { storage } from '@/adapters'.`
+- Persist through `StoragePort` so both platforms compile.
+  `e.g. SQLite on iOS, an in-memory Map on web.`
+- Use only the async expo-sqlite API, and open the database lazily.
+  `e.g. await SQLite.openDatabaseAsync('mowa.db') inside init(), not at module scope.`
+- Never use expo-sqlite on web.
+  `e.g. its web backend is alpha and needs COOP/COEP headers expo export does not emit.`
+- Never infer "permission denied" from an empty HealthKit result.
+  `e.g. HealthKit never discloses read authorization; denied and no-data look identical.`
+- Use camelCase for API JSON fields.
+  `e.g. { photoUrl, startedAt }.`
+- Keep secrets out of the repo.
+  `e.g. read process.env.EXPO_PUBLIC_* and leave .env untracked.`
+
+# Negative Constraints
+
+- Never import a native module or iOS-only package from a screen, component, or store.
+  `e.g. importing expo-sqlite in a screen breaks the web bundle.`
+- Never put a native import in a base file.
+  `e.g. web resolves health.ts and never health.native.ts.`
+- Never edit anything under `ios/` or `android/`.
+  `e.g. expo prebuild --clean deletes both on every run; use a config plugin.`
+- Never skip `strip-aps` after a prebuild.
+  `e.g. aps-environment makes free-team signing fail outright.`
+- Never run `npm run ios` before a first prebuild in a fresh clone.
+  `e.g. strip-aps no-ops, run:ios regenerates the entitlement, and signing fails.`
+- Never switch to pnpm or yarn.
+  `e.g. symlinked node_modules break Expo autolinking and Tailwind scanning.`
+- Never upgrade to Tailwind v4 or NativeWind v5.
+  `e.g. both are known-broken for this stack today.`
+- Never let `react-native-nitro-modules` float.
+  `e.g. keep the exact pin; a mismatch surfaces as an opaque pod build error.`
+- Never trust the simulator for motion, HealthKit, or background location.
+  `e.g. CMMotionActivityManager.isActivityAvailable() returns false there.`
+- Never add remote push or `aps-environment`.
+  `e.g. all notifications are local; remote push needs a paid Apple account.`
+- Never commit `ios/`, `android/`, `dist/`, `.expo/`, or signing material.
+  `e.g. *.mobileprovision is gitignored — keep it that way.`
+- Never lower location accuracy to save battery in the detection layer.
+  `e.g. measured: low accuracy suspends the app and kills background detection entirely.`
+
+## Known Traps
+
+These all present as "it mysteriously stopped working". Check them before debugging code.
+
+- Free-team provisioning profiles expire after 7 days.
+  `e.g. the installed app stops launching with no error message; rebuild to refresh.`
+- A free team allows only 3 apps per device.
+  `e.g. devicectl reports "App installed" while the app is absent from the home screen.`
+- `expo-modules-jsi` 57.0.4 does not compile on Xcode 26.2. Confirmed on this repo, not theoretical.
+  `e.g. JavaScriptCodable+Date.swift:53 "type of expression is ambiguous without a type annotation".`
+- The patch is wired into `postinstall` because npm install reverts it and the build then fails.
+  `e.g. scripts/patch-expo-jsi.mjs runs automatically; it no-ops once upstream fixes this.`
+- Xcode 26.2 is the pinned toolchain. Do not upgrade without re-verifying the whole build.
+  `e.g. the full device build passes on 26.2 with the patch; upgrading buys nothing today.`
+- If someone does upgrade to 26.4+, clear the SPM cache before judging the result.
+  `e.g. rm -rf node_modules/expo-modules-jsi/apple/.DerivedData, or the stale cache hides it.`
+- A free-team build installs but will not launch until the certificate is trusted on the device.
+  `e.g. Settings > General > VPN & Device Management > Developer App > trust your Apple ID.`
+- Signing errors during a raw `xcodebuild` run are usually a missing flag, not a real problem.
+  `e.g. expo run:ios passes -allowProvisioningUpdates; plain xcodebuild does not.`
+- `expo prebuild` cleans by default in SDK 57.
+  `e.g. any manual Xcode change, including the signing team, is discarded.`
+- Motion & Fitness must be enabled system-wide.
+  `e.g. Settings > Privacy & Security > Motion & Fitness > Fitness Tracking.`
+
+# Git/PR Convention
+
+- Branch from `develop`, never from `main`.
+  `e.g. git switch -c feature/walk-record develop.`
+- Prefix branches with `feature/`, `fix/`, or `refactor/`.
+  `e.g. fix/photo-preview.`
+- Prefix commits with the type used in README.md.
+  `e.g. feat: 감정 선택 화면 구현.`
+- Open pull requests against `develop`.
+- Paste the verification gate output in the PR body.
+  `e.g. tsc exit code, export result, and the bundle grep.`
+- Coordinate API request/response changes with the backend before merging.
+  `e.g. never change field names unilaterally.`

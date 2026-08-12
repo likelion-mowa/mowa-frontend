@@ -141,3 +141,27 @@ dist
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 .vite/
+
+# ── Expo / React Native ──────────────────────────────────────────────
+.expo/
+web-build/
+expo-env.d.ts
+.metro-health-check*
+
+# Generated native projects. `expo prebuild --clean` recreates these on
+# every run, so anything edited here is lost. Put native config in
+# app.json or a config plugin under plugins/ instead.
+/ios
+/android
+.kotlin/
+
+# Native signing material — never commit
+*.mobileprovision
+*.p8
+*.p12
+*.key
+*.jks
+*.pem
+
+# macOS
+.DS_Store
