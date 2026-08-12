@@ -44,6 +44,12 @@ Ship target is a hackathon submission with two deliveries.
   `e.g. always use this for the first build in a fresh clone.`
 - `npm run typecheck` before every commit.
 - `npm run export:web` then `npm run serve:web` to check the real static build.
+- `npm run mock` runs the local mock backend; `npm run mock:test` checks it against the spec.
+  `e.g. http://localhost:4000/api/v1 — accounts and caveats in mock/README.md.`
+- The mock needs Node 22.6+ because it imports `src/api/types.ts` directly.
+  `e.g. --experimental-strip-types is what keeps its code values from drifting from the app's.`
+- The mock is local only. Never point the deployed web build at it.
+  `e.g. a judge's browser resolves localhost to their own machine, and HTTPS blocks http://.`
 - Vercel builds from `vercel.json`; never add an SPA rewrite to it.
   `e.g. web.output is "static", so rewriting /:path* to / would break every route.`
 - `npm run patch:jsi` only when the iOS build fails to compile expo-modules-jsi.
