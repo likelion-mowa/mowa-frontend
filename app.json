@@ -1,0 +1,66 @@
+{
+  "expo": {
+    "name": "Mowa",
+    "slug": "mowa",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "icon": "./assets/images/icon.png",
+    "scheme": "mowa",
+    "userInterfaceStyle": "automatic",
+    "platforms": ["ios", "web"],
+    "ios": {
+      "bundleIdentifier": "com.mowa.app",
+      "supportsTablet": false,
+      "entitlements": {
+        "com.apple.developer.healthkit": true,
+        "com.apple.developer.healthkit.background-delivery": true
+      },
+      "infoPlist": {
+        "UIBackgroundModes": ["location"],
+        "NSMotionUsageDescription": "Mowa uses motion and fitness data to detect when you have been walking, so it can offer to save the walk as a diary entry.",
+        "NSLocationWhenInUseUsageDescription": "Mowa uses your location to record where your walk took place.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "Mowa needs Always location access so it can keep detecting walks while the app is in the background.",
+        "NSHealthShareUsageDescription": "Mowa reads your step count and walking distance from Health to describe your walk.",
+        "NSHealthUpdateUsageDescription": "Mowa does not write health data, but HealthKit requires this key in order to request read permission."
+      }
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "static",
+      "favicon": "./assets/images/favicon.png"
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/images/splash-icon.png",
+          "resizeMode": "contain",
+          "backgroundColor": "#ffffff"
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "isIosBackgroundLocationEnabled": true,
+          "locationWhenInUsePermission": "Mowa uses your location to record where your walk took place.",
+          "locationAlwaysAndWhenInUsePermission": "Mowa needs Always location access so it can keep detecting walks while the app is in the background."
+        }
+      ],
+      "expo-notifications",
+      [
+        "@kingstinct/react-native-healthkit",
+        {
+          "background": true,
+          "NSHealthShareUsageDescription": "Mowa reads your step count and walking distance from Health to describe your walk.",
+          "NSHealthUpdateUsageDescription": "Mowa does not write health data, but HealthKit requires this key in order to request read permission."
+        }
+      ],
+      "./plugins/with-development-team"
+    ],
+    "experiments": {
+      "typedRoutes": true,
+      "reactCompiler": true
+    }
+  }
+}
