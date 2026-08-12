@@ -6,10 +6,10 @@
  * tab. Without this plugin, every clean rebuild reverts to "no team" and
  * `expo run:ios` either prompts or fails to sign.
  *
- * The team here is a free Apple Personal Team. That is sufficient for
- * HealthKit (including background delivery), CoreMotion, CoreLocation Always,
- * and local notifications. It does NOT support Push Notifications — see
- * scripts/strip-aps-entitlement.mjs.
+ * This is a paid Apple Developer Program Individual membership. It started as
+ * a free Personal Team and kept the same Team ID through the upgrade, so this
+ * constant did not change — profiles simply went from 7-day to 1-year validity,
+ * and TestFlight / App Store submission became possible.
  *
  * To build under a different Apple account, change DEVELOPMENT_TEAM to your
  * own team ID (Xcode > Settings > Accounts, or `security find-identity -v
