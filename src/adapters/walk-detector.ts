@@ -36,6 +36,9 @@ export const walkDetector: WalkDetectorPort = {
         systemVersion: 'web',
         isSimulator: false,
         isRunning: false,
+        mechanism: 'none',
+        locationAuthorization: 'unavailable',
+        warnings: [],
       },
     };
   },

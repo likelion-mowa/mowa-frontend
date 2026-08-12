@@ -35,6 +35,9 @@ class WalkDetectorModule extends NativeModule<WalkDetectorModuleEvents> {
       systemVersion: 'web',
       isSimulator: false,
       isRunning: false,
+      mechanism: 'none',
+      locationAuthorization: 'unavailable',
+      warnings: [],
     };
   }
 
