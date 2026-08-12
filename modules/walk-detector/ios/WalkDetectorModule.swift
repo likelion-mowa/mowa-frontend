@@ -3,117 +3,149 @@ import CoreMotion
 import UIKit
 
 /**
- * Walk detection module — STUB.
+ * Expo module wrapper around `WalkDetectorCore`.
  *
- * This session only establishes the JS <-> Swift surface. There is no detection
- * logic here yet: `start`/`stop` flip a flag, `queryHistory` returns a canned
- * row, and `emitTestEvent` fires a synthetic event.
- *
- * The real implementation drops into this module next session as
- * `WalkDetectorCore.swift`, wired through `OnStartObserving` below. CoreMotion
- * is imported here only for availability checks and to raise the permission
- * prompt — not to detect anything.
+ * The Core does the detecting and posts the local notification itself; this
+ * wrapper only maps the repo's TS contract (start/stop/queryHistory/
+ * getDiagnostics/emitTestEvent + onWalkDetected) onto the Core's API and
+ * mirrors state to JS. The Core callbacks `onStepUpdate` and `onDeepLink` are
+ * left unattached on purpose — the TS contract has no matching event, and
+ * deep-link wiring is a later session.
  */
 public class WalkDetectorModule: Module {
-  private let activityManager = CMMotionActivityManager()
-  private var isRunning = false
-
   public func definition() -> ModuleDefinition {
     Name("WalkDetector")
 
     Events("onWalkDetected")
 
-    // Fires when the first JS listener attaches. F1 will subscribe
-    // WalkDetectorCore here and forward its callbacks via sendEvent.
+    // Attach the Core callback when the first JS listener arrives. Detection
+    // itself keeps running with no listener; JS just stops hearing about it.
     OnStartObserving("onWalkDetected") {
-      // intentionally empty until F1
+      WalkDetectorCore.shared.onWalkDetected = { [weak self] event in
+        self?.sendEvent("onWalkDetected", Self.toWalkEventPayload(event))
+      }
     }
 
-    // Fires when the last JS listener detaches.
     OnStopObserving("onWalkDetected") {
-      // intentionally empty until F1
+      WalkDetectorCore.shared.onWalkDetected = nil
     }
 
     AsyncFunction("start") { (promise: Promise) in
-      self.isRunning = true
-
-      guard CMMotionActivityManager.isActivityAvailable() else {
-        // Simulator, or a device without a motion coprocessor.
-        promise.resolve(false)
-        return
+      // CLLocationManager wants a run-loop thread and AsyncFunction bodies run
+      // on a background queue, so hop to main before touching the Core.
+      DispatchQueue.main.async {
+        // Inside enable(): startActivityUpdates IS the Motion & Fitness prompt
+        // (CoreMotion has no permission API), and requestAlwaysAuthorization
+        // raises the location prompt. Threshold/cooldown are the measured
+        // defaults from the prior investigation. deepLinkPath rides in the
+        // notification payload but stays unwired until deep links land; "/" is
+        // the only product route that exists.
+        WalkDetectorCore.shared.enable(
+          mechanism: .coreLocationKeepAlive,
+          thresholdSteps: 30,
+          cooldownSeconds: 300,
+          deepLinkPath: "/"
+        ) { result in
+          switch result {
+          case .success:
+            promise.resolve(true)
+          case .failure(let error):
+            // Reject rather than resolve(false): the JS adapter's try/catch
+            // turns this into { ok: false, error } and /debug logs the reason.
+            promise.reject("E_ENABLE", error.localizedDescription)
+          }
+        }
       }
+    }
 
-      // CoreMotion has no explicit permission-request API. Issuing a query IS
-      // the prompt — this call is what makes the "Motion & Fitness" dialog
-      // appear on first launch.
-      self.activityManager.queryActivityStarting(
-        from: Date().addingTimeInterval(-60),
-        to: Date(),
-        to: .main
-      ) { _, _ in
+    AsyncFunction("stop") { (promise: Promise) in
+      DispatchQueue.main.async {
+        WalkDetectorCore.shared.disable()
         promise.resolve(true)
       }
     }
 
-    AsyncFunction("stop") { () -> Bool in
-      self.isRunning = false
-      self.activityManager.stopActivityUpdates()
-      return true
+    AsyncFunction("queryHistory") { (sinceMs: Double, promise: Promise) in
+      // liveEvents is only ever mutated on main; read it there too.
+      DispatchQueue.main.async {
+        let live = WalkDetectorCore.shared.liveEvents.filter {
+          ($0["startedAtMs"] as? Double ?? 0) >= sinceMs
+        }
+        let since = Date(timeIntervalSince1970: sinceMs / 1000)
+        WalkDetectorCore.shared.retrospectiveEvents(since: since) { retro in
+          // A live event dominates any retro session it falls inside: retro
+          // rows never carry step counts (CoreMotion history has none), so
+          // drop a retro row when a live row started within its window.
+          let deduped = retro.filter { row in
+            guard let start = row["startedAtMs"] as? Double,
+                  let end = row["endedAtMs"] as? Double else { return true }
+            return !live.contains { liveRow in
+              guard let liveStart = liveRow["startedAtMs"] as? Double else { return false }
+              return liveStart >= start && liveStart <= end
+            }
+          }
+          let merged = (live + deduped).map(Self.toWalkEventPayload).sorted {
+            (($0["startedAtMs"] as? Double) ?? 0) > (($1["startedAtMs"] as? Double) ?? 0)
+          }
+          promise.resolve(merged)
+        }
+      }
     }
 
-    AsyncFunction("queryHistory") { (sinceMs: Double) -> [[String: Any]] in
-      // STUB: one deterministic row so the bridge has a visible, assertable
-      // return value. Replaced by CMMotionActivityManager.queryActivityStarting
-      // results in the F1 session.
-      return [
-        [
-          "id": "stub-0",
-          "startedAtMs": sinceMs,
-          "endedAtMs": sinceMs + 600_000,
-          "steps": 742,
-          "source": "stub",
-        ]
-      ]
-    }
+    AsyncFunction("getDiagnostics") { (promise: Promise) in
+      DispatchQueue.main.async {
+        #if targetEnvironment(simulator)
+          let isSimulator = true
+        #else
+          let isSimulator = false
+        #endif
 
-    AsyncFunction("getDiagnostics") { () -> [String: Any] in
-      #if targetEnvironment(simulator)
-        let isSimulator = true
-      #else
-        let isSimulator = false
-      #endif
-
-      return [
-        "isPedometerAvailable": CMPedometer.isStepCountingAvailable(),
-        "isActivityAvailable": CMMotionActivityManager.isActivityAvailable(),
-        "motionAuthorization": Self.motionAuthorizationLabel(),
-        "systemVersion": UIDevice.current.systemVersion,
-        "isSimulator": isSimulator,
-        "isRunning": self.isRunning,
-      ]
+        let status = WalkDetectorCore.shared.statusPayload()
+        promise.resolve([
+          "isPedometerAvailable": CMPedometer.isStepCountingAvailable(),
+          "isActivityAvailable": CMMotionActivityManager.isActivityAvailable(),
+          // Keep the local label helper: it has the 'unavailable' case that the
+          // Core's statusPayload() cannot report.
+          "motionAuthorization": Self.motionAuthorizationLabel(),
+          "systemVersion": UIDevice.current.systemVersion,
+          "isSimulator": isSimulator,
+          "isRunning": WalkDetectorCore.shared.isEnabled,
+          "mechanism": (status["mechanism"] as? String) ?? "none",
+          "locationAuthorization": (status["locationAuthorization"] as? String) ?? "unknown",
+          "warnings": (status["warnings"] as? [String]) ?? [],
+        ] as [String: Any])
+      }
     }
 
     AsyncFunction("emitTestEvent") { () -> Bool in
-      // Proves Events / sendEvent / the JS listener path all work end to end,
-      // so that "detection fires but JS never hears it" is not a possible
-      // failure mode to debug later.
+      // Goes through the same mapper as real detections, so this proves the
+      // actual payload path — not a hand-built lookalike of it.
       let now = Date().timeIntervalSince1970 * 1000
       self.sendEvent(
         "onWalkDetected",
-        [
+        Self.toWalkEventPayload([
           "id": UUID().uuidString,
           "startedAtMs": now,
           "endedAtMs": NSNull(),
           "steps": 0,
-          "source": "stub",
-        ]
+          "detection": "stub",
+        ])
       )
       return true
     }
 
-    OnDestroy {
-      self.activityManager.stopActivityUpdates()
-    }
+    // No OnDestroy: the Core is process-lifetime. Tearing it down here would
+    // kill background detection on every Metro reload.
+  }
+
+  /// Core payloads say `detection`; the TS contract says `source`. One mapper
+  /// for live events, history rows and the test event, so the shapes cannot
+  /// drift apart per call site.
+  private static func toWalkEventPayload(_ core: [String: Any]) -> [String: Any] {
+    var payload = core
+    let detection = payload.removeValue(forKey: "detection") as? String
+    payload["source"] = detection ?? "live"
+    return payload
   }
 
   private static func motionAuthorizationLabel() -> String {
@@ -124,5 +156,32 @@ public class WalkDetectorModule: Module {
     case .notDetermined: return "prompt"
     @unknown default: return "unknown"
     }
+  }
+}
+
+/**
+ * Background-relaunch recovery.
+ *
+ * When the system relaunches the app (significant location change), detection
+ * must resume before — and regardless of whether — the JS bundle ever loads,
+ * so the restore call lives in didFinishLaunching, not in module init or JS.
+ * Registered via "appDelegateSubscribers" in expo-module.config.json; the
+ * class and that registration must change together or the build breaks /
+ * restore silently never runs.
+ *
+ * Deliberately does NOT touch UNUserNotificationCenter.delegate —
+ * expo-notifications owns it, and notification authorization is requested from
+ * JS (src/adapters/notifications). Tap responses will reach JS via
+ * getLastNotificationResponseAsync() once deep links get wired.
+ */
+public class WalkDetectorAppDelegate: ExpoAppDelegateSubscriber {
+  public func application(
+    _ application: UIApplication,
+    didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
+  ) -> Bool {
+    let launchedInBackground = application.applicationState == .background
+    WalkDetectorCore.log.notice("did_finish_launching launchedInBackground=\(launchedInBackground)")
+    WalkDetectorCore.shared.restoreIfNeeded()
+    return true
   }
 }

@@ -233,6 +233,20 @@ export default function SmokeScreen() {
             label="isRunning"
             value={state.diagnostics ? String(state.diagnostics.isRunning) : '—'}
           />
+          <Row label="mechanism" value={state.diagnostics?.mechanism ?? '—'} />
+          <Row
+            label="locationAuthorization"
+            value={state.diagnostics?.locationAuthorization ?? '—'}
+          />
+          <Row
+            label="warnings"
+            value={state.diagnostics ? String(state.diagnostics.warnings.length) : '—'}
+          />
+          {state.diagnostics?.warnings.map((warning) => (
+            <Text key={warning} className="mt-1 text-xs text-amber-700">
+              {warning}
+            </Text>
+          ))}
           <Button
             title="getDiagnostics()"
             onPress={async () => {
@@ -244,7 +258,20 @@ export default function SmokeScreen() {
           <View className="h-4" />
           <Row label="queryHistory() rows" value={String(state.history.length)} />
           {state.history.map((walk) => (
-            <Row key={walk.id} label={walk.id} value={`${walk.steps} steps · ${walk.source}`} />
+            <Row
+              key={walk.id}
+              label={walk.id}
+              value={[
+                `${walk.steps} steps`,
+                walk.source,
+                // Optional Swift-side fields: rendering them here is the only
+                // verification the payload shape gets (no gate covers it).
+                walk.distanceMeters != null ? `${Math.round(walk.distanceMeters)}m` : null,
+                walk.confidence ?? null,
+              ]
+                .filter((part): part is string => part !== null)
+                .join(' · ')}
+            />
           ))}
           <Button
             title="queryHistory(last 24h)"

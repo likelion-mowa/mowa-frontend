@@ -1,6 +1,7 @@
 {
   "platforms": ["apple", "web"],
   "apple": {
-    "modules": ["WalkDetectorModule"]
+    "modules": ["WalkDetectorModule"],
+    "appDelegateSubscribers": ["WalkDetectorAppDelegate"]
   }
 }
