@@ -14,7 +14,11 @@ export const location: LocationPort = {
   },
 
   async requestForegroundPermission() {
-    return { ok: false, error: 'Background location is not available on web.' };
+    // The browser does expose navigator.geolocation, but this app only needs
+    // location for walk detection, which is background-only and iOS-only.
+    // Wiring foreground geolocation here would imply a capability the web
+    // build does not actually have.
+    return { ok: false, error: 'Location is only used by walk detection, which is iOS-only.' };
   },
 
   async requestBackgroundPermission() {
