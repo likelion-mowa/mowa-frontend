@@ -273,7 +273,13 @@ final class WalkDetectorCore: NSObject {
     private func passesCooldown() -> Bool {
         let last = UserDefaults.standard.double(forKey: Keys.lastNotifiedAt)
         let now = Date().timeIntervalSince1970
-        if last > 0, now - last < cooldownSeconds { return false }
+        if last > 0, now - last < cooldownSeconds {
+            // MOWA: upstream returned silently here, yet 03-findings.md's diagnostic
+            // table lists this line — silent suppression was the most expensive
+            // failure class in the prior repo, so the skip must leave a trace.
+            Self.log.notice("notification_suppressed reason=cooldown remaining=\(Int(self.cooldownSeconds - (now - last)))s")
+            return false
+        }
         UserDefaults.standard.set(now, forKey: Keys.lastNotifiedAt)
         return true
     }
@@ -373,6 +379,16 @@ final class WalkDetectorCore: NSObject {
             // 구분해서 기록해야 나중에 결과를 오해하지 않습니다.
             guard let sum = statistics?.sumQuantity()?.doubleValue(for: .count()) else {
                 Self.log.notice("observer_read_failed (기기 잠금 중일 수 있음)")
+                return
+            }
+
+            // MOWA: upstream bug fix (03-findings.md 알려진 버그 #2). double(forKey:)
+            // returns 0 for a missing key, so the very first observer fire treated
+            // the whole 2-hour window as newly walked steps and notified the moment
+            // the mechanism was toggled on. On first fire, only set the baseline.
+            if UserDefaults.standard.object(forKey: Keys.lastSeenSteps) == nil {
+                UserDefaults.standard.set(sum, forKey: Keys.lastSeenSteps)
+                Self.log.notice("observer_baseline_set total=\(sum)")
                 return
             }
 
