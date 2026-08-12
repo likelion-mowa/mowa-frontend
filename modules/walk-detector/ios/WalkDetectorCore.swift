@@ -1,0 +1,600 @@
+import Foundation
+import CoreMotion
+import CoreLocation
+import HealthKit
+import UserNotifications
+import UIKit
+import OSLog
+
+/// F1 walk detection. **Deliberately bypasses JS entirely.**
+///
+/// Ported from ios-movement-test `hybrid/shared-ios/WalkDetectorCore.swift`
+/// (commit 7fc8aed, 2026-08-09). The Korean body comments carry the measured
+/// evidence behind every setting — preserve them when editing. Deliberate
+/// divergences from the upstream file are marked inline with `MOWA:` comments;
+/// everything else is verbatim.
+///
+/// Why detection AND notification posting both live in Swift: when the system
+/// relaunches the app in the background, the JS bundle takes seconds to boot,
+/// and iOS may reclaim execution time before any JS listener registers — the
+/// notification would silently never fire. So the walk decision and the
+/// UNUserNotificationCenter post happen entirely in native code, and the Expo
+/// module (`WalkDetectorModule.swift`) is only a window that mirrors state to
+/// JS. For the same reason, restore runs from
+/// `application(_:didFinishLaunchingWithOptions:)` via WalkDetectorAppDelegate,
+/// never from module init or JS.
+///
+/// Boundaries this repo draws around the Core:
+/// - Notification **permission** is requested from JS (src/adapters/notifications);
+///   the Core only posts. It never touches the UNUserNotificationCenter delegate
+///   (expo-notifications owns it).
+/// - `liveEvents` lives in process memory and resets on relaunch — acceptable:
+///   the notification is the product path and `retrospectiveEvents` covers gaps.
+/// - `onStepUpdate` / `onDeepLink` / `recordDeepLink` / `consumePendingDeepLink`
+///   are ported but unwired — the TS contract has no matching surface yet.
+final class WalkDetectorCore: NSObject {
+    static let shared = WalkDetectorCore()
+
+    static let log = Logger(
+        subsystem: Bundle.main.bundleIdentifier ?? "com.example.movementtest",
+        category: "f1-walk"
+    )
+
+    private enum Keys {
+        static let enabled = "walk.enabled"
+        static let mechanism = "walk.mechanism"
+        static let threshold = "walk.thresholdSteps"
+        static let cooldown = "walk.cooldownSeconds"
+        static let deepLinkPath = "walk.deepLinkPath"
+        static let lastNotifiedAt = "walk.lastNotifiedAt"
+        static let lastSeenSteps = "walk.lastSeenSteps"
+    }
+
+    enum Mechanism: String {
+        case coreLocationKeepAlive = "core-location-keepalive"
+        case healthKitObserver = "healthkit-observer"
+        case none
+    }
+
+    // MARK: 상태
+
+    private(set) var isEnabled = false
+    private(set) var mechanism: Mechanism = .none
+    private(set) var currentSteps = 0
+    private(set) var lastActivityLabel = "-"
+    private(set) var lastConfidenceLabel = "-"
+    private(set) var liveEvents: [[String: Any]] = []
+
+    /// 플러그인이 JS 로 이벤트를 올려보내기 위해 연결하는 콜백.
+    /// 웹뷰가 없어도 감지는 계속 돌아야 하므로 **선택적**입니다.
+    var onWalkDetected: (([String: Any]) -> Void)?
+    var onStepUpdate: ((Int, Double?) -> Void)?
+    var onDeepLink: (([String: Any]) -> Void)?
+
+    /// 콜드스타트 레이스 대응 버퍼.
+    /// 알림 탭 응답은 웹 번들 로드보다 먼저 도착하므로 여기에 담아뒀다가
+    /// JS 가 `consumePendingDeepLink()` 로 꺼내갑니다.
+    private var pendingDeepLink: [String: Any]?
+
+    // MARK: 의존성
+
+    private let pedometer = CMPedometer()
+    private let activityManager = CMMotionActivityManager()
+    private let locationManager = CLLocationManager()
+    private let healthStore = HKHealthStore()
+    private var observerQuery: HKObserverQuery?
+
+    private var walkStartedAt: Date?
+    private var walkBaselineSteps: Int?
+    private var stepUpdatesActive = false
+
+    private var thresholdSteps: Int {
+        let stored = UserDefaults.standard.integer(forKey: Keys.threshold)
+        return stored > 0 ? stored : 30
+    }
+    private var cooldownSeconds: TimeInterval {
+        let stored = UserDefaults.standard.double(forKey: Keys.cooldown)
+        return stored > 0 ? stored : 300
+    }
+    private var deepLinkPath: String {
+        UserDefaults.standard.string(forKey: Keys.deepLinkPath) ?? "/walk"
+    }
+
+    private override init() {
+        super.init()
+        locationManager.delegate = self
+    }
+
+    // MARK: 활성화
+
+    func enable(
+        mechanism: Mechanism,
+        thresholdSteps: Int,
+        cooldownSeconds: Double,
+        deepLinkPath: String,
+        completion: @escaping (Result<Void, Error>) -> Void
+    ) {
+        UserDefaults.standard.set(thresholdSteps, forKey: Keys.threshold)
+        UserDefaults.standard.set(cooldownSeconds, forKey: Keys.cooldown)
+        UserDefaults.standard.set(deepLinkPath, forKey: Keys.deepLinkPath)
+
+        switch mechanism {
+        case .coreLocationKeepAlive:
+            guard CMMotionActivityManager.isActivityAvailable() else {
+                completion(.failure(DetectorError.unavailable(
+                    "CMMotionActivityManager.isActivityAvailable() == false — 시뮬레이터에는 모션 코프로세서가 없습니다. 실물 iPhone 이 필요합니다."
+                )))
+                return
+            }
+            startCoreLocationKeepAlive()
+            persist(enabled: true, mechanism: .coreLocationKeepAlive)
+            completion(.success(()))
+
+        case .healthKitObserver:
+            enableHealthKitObserver(completion: completion)
+
+        case .none:
+            completion(.failure(DetectorError.unavailable("메커니즘을 선택하세요.")))
+        }
+    }
+
+    private func startCoreLocationKeepAlive() {
+        // ⚠️ Info.plist 의 위치 설명 키 두 개가 모두 있어야 동작합니다.
+        // 하나라도 없으면 아무 에러 없이 조용히 무시되고, 설치당 1회라 재시도하려면
+        // 앱을 지웠다 다시 설치해야 합니다.
+        locationManager.requestAlwaysAuthorization()
+
+        // ⚠️ UIBackgroundModes 에 location 이 없으면 이 줄이 앱을 즉시 종료시킵니다.
+        locationManager.allowsBackgroundLocationUpdates = true
+        locationManager.pausesLocationUpdatesAutomatically = false
+        locationManager.showsBackgroundLocationIndicator = false
+        // ⚠️ 이 두 줄이 F1 의 성패를 가릅니다. 값을 낮추면 배터리는 아끼지만 상주가 깨집니다.
+        //
+        // "위치 값은 안 쓰니 정확도를 최대한 낮추면 된다" 는 직관이 틀렸습니다. iOS 는
+        // 앱이 위치를 **실제로 소비하는지** 를 보고 백그라운드 실행을 허용하는데, 저정확도
+        // 요청은 셀타워 기반 저전력 경로로 처리되어 앱을 깨워둘 이유가 되지 못합니다.
+        //
+        // 실측 (iPhone 16 Pro / iOS 26.5.2, S2 = 홈으로 나간 뒤 화면잠금, 실내 보행):
+        //
+        //   변형 A  3km + distanceFilter 500m
+        //     백그라운드 위치 전달 0건 · walk_detected 0건 · 포그라운드 이탈 후 4~11초에 서스펜드
+        //     → 500m 를 이동하지 않으면 didUpdateLocations 가 아예 호출되지 않는다
+        //
+        //   변형 B  3km + distanceFilter None
+        //     백그라운드 위치 전달 7건 · walk_detected 0건 · active 9 / suspended 8 로 번갈아
+        //     → 위치는 오지만 상주가 유지되지 않아 CoreMotion 콜백이 흐르지 않는다
+        //     → 앱을 여는 순간 쌓인 496 걸음이 한꺼번에 도착하고 그제야 알림이 발송된다
+        //
+        //   변형 C  10m + distanceFilter None   ← 지금 값
+        //     실제 GPS 세션을 만들어 상주를 유지하려는 시도. 배터리 비용이 가장 큰 설정이다.
+        //
+        // ⚠️ keepalive_tick 로그의 부재를 근거로 쓰지 마세요. 그건 log.debug 라 아카이브에
+        //    보존되지 않습니다. 판단은 locationd 의 "Sending location to client" 건수와
+        //    RBSProcessState 의 running-suspended 전환으로 하세요.
+        locationManager.desiredAccuracy = kCLLocationAccuracyNearestTenMeters
+        locationManager.distanceFilter = kCLDistanceFilterNone
+        locationManager.startUpdatingLocation()
+        // 시스템이 앱을 종료시켰을 때 다시 띄우기 위한 보험.
+        locationManager.startMonitoringSignificantLocationChanges()
+
+        startMotionUpdates()
+
+        isEnabled = true
+        mechanism = .coreLocationKeepAlive
+        Self.log.notice("enabled mechanism=core-location-keepalive")
+    }
+
+    private func startMotionUpdates() {
+        activityManager.startActivityUpdates(to: .main) { [weak self] activity in
+            guard let self, let activity else { return }
+            self.handleActivity(activity)
+        }
+
+        guard CMPedometer.isStepCountingAvailable() else { return }
+        pedometer.startUpdates(from: Date()) { [weak self] data, _ in
+            guard let self, let data else { return }
+            let steps = data.numberOfSteps.intValue
+            let distance = data.distance?.doubleValue
+            DispatchQueue.main.async {
+                self.handlePedometer(steps: steps, distance: distance)
+            }
+        }
+    }
+
+    // MARK: 판정
+
+    private func handleActivity(_ activity: CMMotionActivity) {
+        let labels = [
+            activity.walking ? "walking" : nil,
+            activity.running ? "running" : nil,
+            activity.stationary ? "stationary" : nil,
+            activity.automotive ? "automotive" : nil,
+        ].compactMap { $0 }
+        lastActivityLabel = labels.isEmpty ? "unknown" : labels.joined(separator: "+")
+
+        switch activity.confidence {
+        case .low: lastConfidenceLabel = "low"
+        case .medium: lastConfidenceLabel = "medium"
+        case .high: lastConfidenceLabel = "high"
+        @unknown default: lastConfidenceLabel = "?"
+        }
+
+        // ⚠️ CMMotionActivity 의 플래그들은 상호배타가 아니고 전부 false 일 수도 있습니다.
+        // confidence 로 거르지 않으면 차 안에서 "걷고 있습니다!" 알림이 날아갑니다.
+        let isWalking = activity.walking && !activity.automotive && activity.confidence != .low
+
+        if isWalking, walkStartedAt == nil {
+            walkStartedAt = Date()
+            walkBaselineSteps = currentSteps
+            Self.log.notice("walk_started confidence=\(self.lastConfidenceLabel, privacy: .public)")
+        } else if !isWalking, activity.stationary, walkStartedAt != nil {
+            walkStartedAt = nil
+            walkBaselineSteps = nil
+        }
+    }
+
+    private func handlePedometer(steps: Int, distance: Double?) {
+        currentSteps = steps
+        if stepUpdatesActive { onStepUpdate?(steps, nil) }
+
+        guard let startedAt = walkStartedAt, let baseline = walkBaselineSteps else { return }
+        let walked = steps - baseline
+        guard walked >= thresholdSteps else { return }
+        guard passesCooldown() else { return }
+
+        let now = Date()
+        let event: [String: Any] = [
+            "id": "live-\(Int(now.timeIntervalSince1970))",
+            "startedAtMs": startedAt.timeIntervalSince1970 * 1000,
+            "endedAtMs": NSNull(),
+            "steps": walked,
+            "distanceMeters": distance ?? NSNull(),
+            "confidence": lastConfidenceLabel,
+            "detection": "live",
+        ]
+        liveEvents.insert(event, at: 0)
+
+        let stateLabel: String
+        switch UIApplication.shared.applicationState {
+        case .active: stateLabel = "foreground"
+        case .inactive: stateLabel = "inactive"
+        case .background: stateLabel = "background"
+        @unknown default: stateLabel = "?"
+        }
+        Self.log.notice("walk_detected steps=\(walked) appState=\(stateLabel, privacy: .public)")
+
+        // 알림은 **여기 네이티브에서** 발송합니다. JS 가 떠 있는지와 무관하게 동작해야 하므로.
+        postNotification(steps: walked, issuedAt: now)
+
+        // 웹뷰가 살아 있으면 화면 갱신용으로도 올려보냅니다 (없어도 무방).
+        onWalkDetected?(event)
+    }
+
+    private func passesCooldown() -> Bool {
+        let last = UserDefaults.standard.double(forKey: Keys.lastNotifiedAt)
+        let now = Date().timeIntervalSince1970
+        if last > 0, now - last < cooldownSeconds { return false }
+        UserDefaults.standard.set(now, forKey: Keys.lastNotifiedAt)
+        return true
+    }
+
+    private func postNotification(steps: Int, issuedAt: Date) {
+        let content = UNMutableNotificationContent()
+        content.title = "걷기가 감지되었습니다"
+        content.body = "\(steps)걸음 · 탭하면 걷기 화면으로 이동합니다"
+        content.sound = .default
+        content.userInfo = [
+            "path": deepLinkPath,
+            "issuedAtMs": issuedAt.timeIntervalSince1970 * 1000,
+        ]
+
+        let request = UNNotificationRequest(identifier: "walk", content: content, trigger: nil)
+        UNUserNotificationCenter.current().add(request) { error in
+            if let error {
+                Self.log.error("notification_failed \(error.localizedDescription, privacy: .public)")
+            } else {
+                Self.log.notice("notification_posted issuedAt=\(issuedAt.timeIntervalSince1970)")
+            }
+        }
+    }
+
+    // MARK: HealthKit 경로
+
+    private func enableHealthKitObserver(completion: @escaping (Result<Void, Error>) -> Void) {
+        guard HKHealthStore.isHealthDataAvailable() else {
+            completion(.failure(DetectorError.unavailable("HealthKit 을 사용할 수 없습니다.")))
+            return
+        }
+        let stepType = HKQuantityType.quantityType(forIdentifier: .stepCount)!
+        healthStore.requestAuthorization(toShare: [], read: [stepType]) { [weak self] _, error in
+            guard let self else { return }
+            if let error {
+                completion(.failure(error))
+                return
+            }
+            // ⚠️ .immediate 를 넘겨도 stepCount 는 Apple 이 시간당 1회로 조용히 강등합니다
+            // ("enforced transparently"). 그래서 처음부터 .hourly 로 요청합니다.
+            self.healthStore.enableBackgroundDelivery(for: stepType, frequency: .hourly) { ok, error in
+                if let error {
+                    // errorAuthorizationDenied 는 보통 권한이 아니라
+                    // com.apple.developer.healthkit.background-delivery entitlement 누락입니다.
+                    completion(.failure(error))
+                    return
+                }
+                guard ok else {
+                    completion(.failure(DetectorError.unavailable("백그라운드 delivery 활성화 실패")))
+                    return
+                }
+                DispatchQueue.main.async {
+                    self.registerObserverQuery()
+                    self.isEnabled = true
+                    self.mechanism = .healthKitObserver
+                    self.persist(enabled: true, mechanism: .healthKitObserver)
+                    Self.log.notice("enabled mechanism=healthkit-observer frequency=hourly")
+                    completion(.success(()))
+                }
+            }
+        }
+    }
+
+    /// ⚠️ 반드시 앱 실행 초기(AppDelegate)에 등록해야 합니다.
+    func registerObserverQuery() {
+        guard observerQuery == nil, HKHealthStore.isHealthDataAvailable() else { return }
+        guard let stepType = HKQuantityType.quantityType(forIdentifier: .stepCount) else { return }
+
+        let query = HKObserverQuery(sampleType: stepType, predicate: nil) { [weak self] _, completionHandler, error in
+            // ⚠️ completionHandler 를 3번 호출하지 않으면 HealthKit 이 이 앱에 대한
+            // 백그라운드 전송을 **영구히** 중단합니다. 어느 경로로 빠져나가든 반드시 호출.
+            defer { completionHandler() }
+            guard error == nil, let self else { return }
+            Self.log.notice("observer_fired")
+            self.handleObserverFired()
+        }
+
+        healthStore.execute(query)
+        observerQuery = query
+        Self.log.notice("observer_registered")
+    }
+
+    private func handleObserverFired() {
+        guard let stepType = HKQuantityType.quantityType(forIdentifier: .stepCount) else { return }
+        let end = Date()
+        let start = end.addingTimeInterval(-2 * 3600)
+        let predicate = HKQuery.predicateForSamples(withStart: start, end: end)
+
+        let query = HKStatisticsQuery(
+            quantityType: stepType,
+            quantitySamplePredicate: predicate,
+            options: .cumulativeSum
+        ) { [weak self] _, statistics, _ in
+            guard let self else { return }
+            // ⚠️ 기기가 잠겨 있으면 HealthKit 을 읽을 수 없습니다
+            // (Protected Unless Open, 잠금 ~10분 후 차단). 값이 없는 것과 걸음이 0인 것을
+            // 구분해서 기록해야 나중에 결과를 오해하지 않습니다.
+            guard let sum = statistics?.sumQuantity()?.doubleValue(for: .count()) else {
+                Self.log.notice("observer_read_failed (기기 잠금 중일 수 있음)")
+                return
+            }
+
+            let previous = UserDefaults.standard.double(forKey: Keys.lastSeenSteps)
+            UserDefaults.standard.set(sum, forKey: Keys.lastSeenSteps)
+            let delta = sum - previous
+            Self.log.notice("observer_steps total=\(sum) delta=\(delta)")
+
+            guard delta >= Double(self.thresholdSteps), self.passesCooldown() else { return }
+            self.postNotification(steps: Int(delta), issuedAt: Date())
+        }
+        healthStore.execute(query)
+    }
+
+    // MARK: 비활성화 · 복구
+
+    func disable() {
+        activityManager.stopActivityUpdates()
+        pedometer.stopUpdates()
+        locationManager.stopUpdatingLocation()
+        locationManager.stopMonitoringSignificantLocationChanges()
+        locationManager.allowsBackgroundLocationUpdates = false
+        if let observerQuery {
+            healthStore.stop(observerQuery)
+            self.observerQuery = nil
+        }
+        healthStore.disableAllBackgroundDelivery { _, _ in }
+
+        persist(enabled: false, mechanism: .none)
+        isEnabled = false
+        mechanism = .none
+        walkStartedAt = nil
+        walkBaselineSteps = nil
+        Self.log.notice("disabled")
+    }
+
+    /// AppDelegate 가 실행 초기에 호출합니다.
+    func restoreIfNeeded() {
+        guard UserDefaults.standard.bool(forKey: Keys.enabled) else { return }
+        let saved = Mechanism(rawValue: UserDefaults.standard.string(forKey: Keys.mechanism) ?? "") ?? .none
+        Self.log.notice("restore mechanism=\(saved.rawValue, privacy: .public)")
+
+        switch saved {
+        case .coreLocationKeepAlive:
+            guard locationManager.authorizationStatus == .authorizedAlways else {
+                Self.log.notice("restore_skipped reason=not-always-authorized")
+                return
+            }
+            startCoreLocationKeepAlive()
+        case .healthKitObserver:
+            registerObserverQuery()
+            isEnabled = true
+            mechanism = .healthKitObserver
+        case .none:
+            break
+        }
+    }
+
+    private func persist(enabled: Bool, mechanism: Mechanism) {
+        UserDefaults.standard.set(enabled, forKey: Keys.enabled)
+        UserDefaults.standard.set(mechanism.rawValue, forKey: Keys.mechanism)
+    }
+
+    // MARK: 포그라운드 걸음 관측
+
+    func startStepUpdates() {
+        stepUpdatesActive = true
+        guard mechanism == .none, CMPedometer.isStepCountingAvailable() else { return }
+        // 백그라운드 감지가 꺼져 있어도 포그라운드 관측은 가능해야 합니다.
+        pedometer.startUpdates(from: Date()) { [weak self] data, _ in
+            guard let self, let data else { return }
+            let steps = data.numberOfSteps.intValue
+            DispatchQueue.main.async {
+                self.currentSteps = steps
+                self.onStepUpdate?(steps, data.currentCadence?.doubleValue)
+            }
+        }
+    }
+
+    func stopStepUpdates() {
+        stepUpdatesActive = false
+        if mechanism == .none { pedometer.stopUpdates() }
+    }
+
+    // MARK: 딥링크 버퍼
+
+    func recordDeepLink(path: String, issuedAtMs: Double?, coldStart: Bool) {
+        let link: [String: Any] = [
+            "path": path,
+            "issuedAtMs": issuedAtMs ?? NSNull(),
+            "coldStart": coldStart,
+        ]
+        pendingDeepLink = link
+        Self.log.notice("deeplink_received path=\(path, privacy: .public) coldStart=\(coldStart)")
+        onDeepLink?(link)
+    }
+
+    func consumePendingDeepLink() -> [String: Any]? {
+        defer { pendingDeepLink = nil }
+        return pendingDeepLink
+    }
+
+    // MARK: 진단
+
+    func statusPayload() -> [String: Any] {
+        var warnings: [String] = []
+
+        if !CMMotionActivityManager.isActivityAvailable() {
+            warnings.append("동작 분류를 사용할 수 없습니다 — 시뮬레이터에는 모션 코프로세서가 없습니다.")
+        }
+        if CMMotionActivityManager.authorizationStatus() == .denied {
+            warnings.append("설정 > 개인정보 보호 및 보안 > 동작 및 피트니스 > 피트니스 추적이 꺼져 있습니다. 이 마스터 토글이 꺼지면 기기 전체에서 CoreMotion 이 죽습니다.")
+        }
+        if mechanism == .coreLocationKeepAlive, locationManager.authorizationStatus != .authorizedAlways {
+            warnings.append("위치 권한이 '항상'이 아닙니다. '사용 중'만으로는 백그라운드에서 프로세스가 유지되지 않습니다.")
+        }
+        if ProcessInfo.processInfo.isLowPowerModeEnabled {
+            warnings.append("저전력 모드가 켜져 있습니다 — 백그라운드 실행이 억제되어 측정이 오염됩니다.")
+        }
+
+        let motionAuth: String
+        switch CMMotionActivityManager.authorizationStatus() {
+        case .authorized: motionAuth = "granted"
+        case .denied: motionAuth = "denied"
+        case .restricted: motionAuth = "denied"
+        case .notDetermined: motionAuth = "prompt"
+        @unknown default: motionAuth = "unknown"
+        }
+
+        let locationAuth: String
+        switch locationManager.authorizationStatus {
+        case .authorizedAlways: locationAuth = "always"
+        case .authorizedWhenInUse: locationAuth = "whenInUse"
+        case .denied, .restricted: locationAuth = "denied"
+        case .notDetermined: locationAuth = "notDetermined"
+        @unknown default: locationAuth = "unknown"
+        }
+
+        return [
+            "enabled": isEnabled,
+            "mechanism": mechanism.rawValue,
+            "locationAuthorization": locationAuth,
+            "motionAuthorization": motionAuth,
+            "warnings": warnings,
+        ]
+    }
+
+    /// 앱이 꺼져 있던 동안의 걷기를 소급 조회합니다.
+    /// ⚠️ F1 성공이 아닙니다 — "알림을 보낼 수 있었다"가 아니라 "나중에 알아냈다"는 뜻입니다.
+    func retrospectiveEvents(since: Date, completion: @escaping ([[String: Any]]) -> Void) {
+        guard CMMotionActivityManager.isActivityAvailable() else {
+            completion([])
+            return
+        }
+        activityManager.queryActivityStarting(from: since, to: Date(), to: .main) { activities, _ in
+            guard let activities else {
+                completion([])
+                return
+            }
+
+            var events: [[String: Any]] = []
+            var sessionStart: Date?
+            var sessionConfidence = "-"
+
+            for activity in activities {
+                if activity.walking, sessionStart == nil {
+                    sessionStart = activity.startDate
+                    switch activity.confidence {
+                    case .high: sessionConfidence = "high"
+                    case .medium: sessionConfidence = "medium"
+                    default: sessionConfidence = "low"
+                    }
+                } else if !activity.walking, let start = sessionStart {
+                    let end = activity.startDate
+                    if end.timeIntervalSince(start) >= 60 {
+                        events.append([
+                            "id": "retro-\(Int(start.timeIntervalSince1970))",
+                            "startedAtMs": start.timeIntervalSince1970 * 1000,
+                            "endedAtMs": end.timeIntervalSince1970 * 1000,
+                            "steps": 0,
+                            "distanceMeters": NSNull(),
+                            "confidence": sessionConfidence,
+                            "detection": "retrospective",
+                        ])
+                    }
+                    sessionStart = nil
+                }
+            }
+            completion(Array(events.reversed().prefix(20)))
+        }
+    }
+
+    enum DetectorError: LocalizedError {
+        case unavailable(String)
+
+        var errorDescription: String? {
+            switch self {
+            case .unavailable(let message): return message
+            }
+        }
+    }
+}
+
+// MARK: - CLLocationManagerDelegate
+
+extension WalkDetectorCore: CLLocationManagerDelegate {
+    func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
+        Self.log.notice("authorization_changed status=\(manager.authorizationStatus.rawValue)")
+        if manager.authorizationStatus == .authorizedAlways,
+           mechanism == .coreLocationKeepAlive,
+           isEnabled {
+            manager.allowsBackgroundLocationUpdates = true
+        }
+    }
+
+    func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
+        // 위치 값 자체는 쓰지 않습니다. 이 로그가 백그라운드에서 계속 찍히는지가
+        // "프로세스 상주가 유지되고 있는가"의 지표입니다.
+        Self.log.debug("keepalive_tick locations=\(locations.count)")
+    }
+
+    func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
+        Self.log.error("location_error \(error.localizedDescription, privacy: .public)")
+    }
+}
