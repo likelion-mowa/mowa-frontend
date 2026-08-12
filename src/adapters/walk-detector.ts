@@ -1,0 +1,50 @@
+import type { WalkDetectorPort } from './types';
+
+/**
+ * WEB implementation — and the file `tsc` resolves for the whole codebase.
+ *
+ * Metro resolves `walk-detector.web.ts` -> `walk-detector.ts` on web and
+ * `walk-detector.native.ts` on iOS; it never considers `.native.ts` for web.
+ * `tsc` has no concept of platform extensions and only ever resolves this base
+ * file, which is why it must be a real module rather than a declaration stub.
+ *
+ * Keeping the native import exclusively inside `.native.ts` is also what
+ * guarantees `modules/walk-detector` never enters the web bundle graph.
+ */
+export const walkDetector: WalkDetectorPort = {
+  isAvailable: false,
+
+  async start() {
+    return { ok: false, error: 'Walk detection requires CoreMotion and is iOS-only.' };
+  },
+
+  async stop() {
+    return { ok: false, error: 'Walk detection requires CoreMotion and is iOS-only.' };
+  },
+
+  async queryHistory() {
+    return { ok: true, value: [] };
+  },
+
+  async getDiagnostics() {
+    return {
+      ok: true,
+      value: {
+        isPedometerAvailable: false,
+        isActivityAvailable: false,
+        motionAuthorization: 'unavailable',
+        systemVersion: 'web',
+        isSimulator: false,
+        isRunning: false,
+      },
+    };
+  },
+
+  async emitTestEvent() {
+    return { ok: false, error: 'No native event source on web.' };
+  },
+
+  subscribe() {
+    return () => {};
+  },
+};
