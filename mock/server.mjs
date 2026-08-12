@@ -72,6 +72,13 @@ function ok(res, data, message = '요청이 성공적으로 처리되었습니�
   return res.status(status).json({ success: true, message, data });
 }
 
+/**
+ * `code` deliberately mirrors the HTTP status rather than naming a business
+ * condition. The spec defines exactly one code (`INVALID_CREDENTIALS`), so any
+ * taxonomy invented here would be fiction the client might come to depend on.
+ * Team decision: branch on status now, split codes out once the backend
+ * publishes its list. See the ApiFailure doc comment in src/api/types.ts.
+ */
 function fail(res, status, code, detail) {
   return res.status(status).json({
     success: false,
@@ -112,22 +119,42 @@ function kstRange(from, to) {
   return [start.getTime(), endExclusive.getTime()];
 }
 
+/**
+ * Multi-value columns come back sorted by their own value, NOT in insertion order.
+ *
+ * Two reasons. It is deterministic, so the same data always renders the same way
+ * and a snapshot test cannot go flaky. And it is the closer guess at the real
+ * backend: these tables are `PRIMARY KEY (parent_id, value)`, so a query without
+ * an ORDER BY is served from that B-tree and arrives in value order rather than
+ * the order rows were written.
+ *
+ * That is still a guess about someone else's implementation. `emotions` and
+ * `tags` are sets — compare them as sets, never by array position.
+ */
+const sorted = (values) => [...values].sort();
+
 function emotionsOfDraft(draftId) {
-  return table('experienceDraftEmotions')
-    .filter((r) => r.draftId === draftId)
-    .map((r) => r.emotion);
+  return sorted(
+    table('experienceDraftEmotions')
+      .filter((r) => r.draftId === draftId)
+      .map((r) => r.emotion),
+  );
 }
 
 function emotionsOfExperience(experienceId) {
-  return table('walkExperienceEmotions')
-    .filter((r) => r.experienceId === experienceId)
-    .map((r) => r.emotion);
+  return sorted(
+    table('walkExperienceEmotions')
+      .filter((r) => r.experienceId === experienceId)
+      .map((r) => r.emotion),
+  );
 }
 
 function tagsOfExperience(experienceId) {
-  return table('walkExperienceTags')
-    .filter((r) => r.experienceId === experienceId)
-    .map((r) => r.tag);
+  return sorted(
+    table('walkExperienceTags')
+      .filter((r) => r.experienceId === experienceId)
+      .map((r) => r.tag),
+  );
 }
 
 /**

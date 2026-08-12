@@ -187,6 +187,10 @@ Run these four gates in order. Never claim work is done without pasting their ou
   `e.g. the detector reports epochMs; convert with toIsoDateTime at the boundary.`
 - Treat `emotions[]` and `tags[]` as whole-array replacements on PATCH.
   `e.g. omit to keep, [] to clear, a list to replace — there is no partial add.`
+- Treat `emotions[]` and `tags[]` as sets. Never compare them by array position.
+  `e.g. the mock sorts by code, but the real backend's row order is not specified.`
+- Branch on the HTTP status, never on `error.code`.
+  `e.g. the spec names one code; a switch on the rest silently hits default and shows wrong UI.`
 - Use only the async expo-sqlite API, and open the database lazily.
   `e.g. await SQLite.openDatabaseAsync('mowa.db') inside init(), not at module scope.`
 - Bump `PRAGMA user_version` when the SQLite schema changes.

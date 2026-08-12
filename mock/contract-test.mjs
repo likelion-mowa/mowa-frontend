@@ -210,12 +210,16 @@ try {
   });
   check('중복 emotion → 400', dupEmotion.status === 400);
 
+  // 입력을 일부러 역순으로 보내 정렬 여부를 확인합니다.
   const draft = await call('POST', `/walk-candidates/${candidateId}/experience-drafts`, {
-    token, body: { companion: 'ALONE', emotions: ['CALM', 'PENSIVE'], situation: 'AFTERNOON' },
+    token, body: { companion: 'ALONE', emotions: ['PENSIVE', 'CALM'], situation: 'AFTERNOON' },
   });
   check('Draft 생성 → 201 + aiGenerationStatus PENDING',
     draft.status === 201 && draft.json.data.aiGenerationStatus === 'PENDING');
   check('emotions 다중 저장', draft.json.data.emotions.length === 2);
+  check('emotions는 저장 순서가 아니라 코드 기준 정렬로 반환',
+    JSON.stringify(draft.json.data.emotions) === JSON.stringify(['CALM', 'PENSIVE']),
+    `got ${JSON.stringify(draft.json.data.emotions)}`);
   const draftId = draft.json.data.draftId;
 
   const dupDraft = await call('POST', `/walk-candidates/${candidateId}/experience-drafts`, { token, body: {} });
@@ -286,7 +290,7 @@ try {
     body: {
       draftId, title: '오후 산책', body: '천천히 걸었다.',
       companion: 'ALONE', emotions: ['CALM'], situation: 'AFTERNOON',
-      tags: ['#망원동', '오후산책'],
+      tags: ['오후산책', '#망원동'],
     },
   });
   check('경험 확정 → 201', confirmed.status === 201, `got ${confirmed.status}`);
@@ -302,6 +306,9 @@ try {
       && detail.json.data.locationSummary === '망원동',
     JSON.stringify({ s: detail.json.data.startedAt, d: detail.json.data.durationSeconds }));
   check('태그는 # 없이 저장', detail.json.data.tags.includes('망원동') && !detail.json.data.tags.includes('#망원동'));
+  check('tags도 코드 기준 정렬로 반환 (입력은 역순이었음)',
+    JSON.stringify(detail.json.data.tags) === JSON.stringify(['망원동', '오후산책']),
+    `got ${JSON.stringify(detail.json.data.tags)}`);
 
   // 종료 정보가 없는 Candidate는 Snapshot을 만들 수 없으므로 확정이 막혀야 합니다.
   const openCandidate = await call('POST', '/walk-candidates', {

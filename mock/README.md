@@ -93,23 +93,42 @@ TypeScript를 Node에서 그대로 읽기 위해 npm 스크립트가 `--experime
 
 | 항목 | 내가 정한 값 | 위험 |
 | --- | --- | --- |
-| `error.code` 문자열 | `NOT_FOUND` `BAD_REQUEST` `CONFLICT` `UNAUTHORIZED` `AI_GENERATION_FAILED` | 명세에 있는 건 `INVALID_CREDENTIALS` 하나뿐입니다. **`error.code`로 분기하는 코드는 깨집니다.** |
+| `error.code` 문자열 | HTTP status를 그대로 옮긴 값 (`NOT_FOUND` `BAD_REQUEST` `CONFLICT` `UNAUTHORIZED`) + `AI_GENERATION_FAILED` | 명세에 있는 건 `INVALID_CREDENTIALS` 하나뿐. **팀 결정: 분기는 HTTP status로 하고 코드는 나중에 분리** ↓ |
 | 생성 성공 코드 | `201` (Candidate·Draft·Experience) | 명세 미지정. 백엔드가 `200`일 수 있습니다. |
 | 오류 코드 선택 | RECORDING 아닌 Candidate에 Draft → `400` | 명세는 조건만 적고 코드를 안 정했습니다. `409`일 수도 있습니다. |
 | 상태 전이 엄격성 | `DETECTED → RECORDING` 직행을 `400`으로 거부 | 명세 다이어그램을 강제 규칙으로 읽었습니다. 예시일 뿐일 수 있습니다. |
 | 수정 불가 필드 | `startedAt` 등을 보내면 `400` | 명세는 "수정 범위에서 제외"라고만 합니다. 백엔드는 조용히 무시할 수 있습니다. |
 | 응답 봉투 적용 범위 | 전 엔드포인트에 적용 | 명세의 엔드포인트별 Response 블록은 필드만 나열합니다. 일관된 해석이지만 가정입니다. |
-| `emotions[]`·`tags[]` 순서 | 저장 순서 | 실제 SQL은 다른 순서로 줄 수 있습니다. **배열 순서에 의존하지 마세요.** |
 | `message` 문자열 | 전부 제가 씀 | 표시용으로 쓰지 마세요. |
 | AI 생성 지연 | 즉시 응답 | 실제로는 OpenAI 호출이라 수 초 걸립니다. **로딩 상태·타임아웃은 이 mock으로 검증되지 않습니다.** |
 | 동시성 | lowdb, 트랜잭션 없음. UNIQUE는 조회 후 삽입이라 경합에 취약 | 실제 DB는 제약조건으로 강제합니다. 단일 사용자 테스트로는 드러나지 않습니다. |
 
-**실무 지침**
+**`error.code` — 팀 결정 (2026-08-12)**
 
-- `error.code`나 명세에 없는 status code로 분기하지 마세요. 봉투의 `success`와
-  명세가 명시한 코드(`401`, `404`, `409`, 쿼리 규칙 `400`)까지만 신뢰하세요.
-- 위 표는 백엔드 담당자와 맞춰야 할 목록입니다. 특히 `error.code`는 합의가 필요합니다.
-  (AGENTS.md: "Coordinate API request/response changes with the backend before merging.")
+지금은 **HTTP status로만 분기**하고, `error.code`는 백엔드가 목록을 확정한 뒤에 분리합니다.
+
+- 신뢰할 것: 명세가 명시한 `401`, `404`, `409`, 쿼리 규칙 `400`, 그리고 봉투의 `success`
+- 로깅에만 쓸 것: `error.code`, `error.detail`
+- `error.code`로 `switch`를 쓰면 실제 백엔드에서 조용히 `default`로 빠집니다.
+  크래시가 아니라 **잘못된 UI**라서 알아채기 어렵습니다.
+
+백엔드가 코드를 공개하면 다른 코드값들처럼 `src/api/types.ts`에 `as const` + union으로
+넣고 이 서버가 import하면 됩니다. 나중에 분리하는 비용은 싸고, 지금 의존하는 비용은 비쌉니다.
+
+**나머지 표는 백엔드 담당자와 맞춰야 할 목록입니다.**
+(AGENTS.md: "Coordinate API request/response changes with the backend before merging.")
+
+### `emotions[]`·`tags[]` 순서
+
+**코드 기준 정렬**로 반환합니다. 저장 순서가 아닙니다.
+
+결정적이라 같은 데이터가 항상 같게 렌더링되고 스냅샷 테스트가 흔들리지 않습니다.
+또 이 테이블들이 `PRIMARY KEY (parent_id, value)`라 `ORDER BY` 없는 조회는 그 B-tree에서
+값 순서로 나올 가능성이 높아, 실제 백엔드에 더 가까운 추측이기도 합니다.
+
+그래도 남의 구현에 대한 추측입니다. **둘 다 집합이므로 배열 위치로 비교하지 마세요.**
+`JSON.stringify(before) === JSON.stringify(after)` 같은 변경 감지는 정렬이 보장돼야만
+안전하고, 실제 백엔드가 다른 순서를 주면 그대로 오판합니다.
 
 ### 반대로, 믿어도 되는 것
 
