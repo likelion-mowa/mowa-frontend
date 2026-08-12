@@ -1,0 +1,133 @@
+{
+  "users": [
+    {
+      "id": "11111111-1111-4111-8111-111111111111",
+      "loginId": "mowa01",
+      "password": "password",
+      "nickname": "모아",
+      "createdAt": "2026-08-01T09:00:00+09:00",
+      "updatedAt": "2026-08-01T09:00:00+09:00"
+    },
+    {
+      "id": "22222222-2222-4222-8222-222222222222",
+      "loginId": "mowa02",
+      "password": "password",
+      "nickname": "두번째사용자",
+      "createdAt": "2026-08-01T09:00:00+09:00",
+      "updatedAt": "2026-08-01T09:00:00+09:00"
+    }
+  ],
+
+  "walkCandidates": [
+    {
+      "id": "aaaaaaa1-0000-4000-8000-000000000001",
+      "userId": "11111111-1111-4111-8111-111111111111",
+      "detectedStartAt": "2026-08-11T14:02:00+09:00",
+      "detectedEndAt": "2026-08-11T14:38:00+09:00",
+      "durationSeconds": 2160,
+      "locationSummary": "망원동",
+      "status": "RECORDING",
+      "createdAt": "2026-08-11T14:02:00+09:00",
+      "updatedAt": "2026-08-11T14:38:00+09:00"
+    },
+    {
+      "id": "aaaaaaa1-0000-4000-8000-000000000002",
+      "userId": "11111111-1111-4111-8111-111111111111",
+      "detectedStartAt": "2026-08-12T08:15:00+09:00",
+      "detectedEndAt": "2026-08-12T08:41:00+09:00",
+      "durationSeconds": 1560,
+      "locationSummary": "연남동",
+      "status": "RECORDING",
+      "createdAt": "2026-08-12T08:15:00+09:00",
+      "updatedAt": "2026-08-12T08:41:00+09:00"
+    },
+    {
+      "id": "aaaaaaa1-0000-4000-8000-000000000003",
+      "userId": "11111111-1111-4111-8111-111111111111",
+      "detectedStartAt": "2026-08-12T19:30:00+09:00",
+      "detectedEndAt": null,
+      "durationSeconds": null,
+      "locationSummary": null,
+      "status": "DETECTED",
+      "createdAt": "2026-08-12T19:30:00+09:00",
+      "updatedAt": "2026-08-12T19:30:00+09:00"
+    },
+    {
+      "id": "aaaaaaa1-0000-4000-8000-000000000009",
+      "userId": "22222222-2222-4222-8222-222222222222",
+      "detectedStartAt": "2026-08-11T10:00:00+09:00",
+      "detectedEndAt": "2026-08-11T10:20:00+09:00",
+      "durationSeconds": 1200,
+      "locationSummary": "합정동",
+      "status": "RECORDING",
+      "createdAt": "2026-08-11T10:00:00+09:00",
+      "updatedAt": "2026-08-11T10:20:00+09:00"
+    }
+  ],
+
+  "experienceDrafts": [
+    {
+      "id": "bbbbbbb1-0000-4000-8000-000000000001",
+      "userId": "11111111-1111-4111-8111-111111111111",
+      "candidateId": "aaaaaaa1-0000-4000-8000-000000000001",
+      "photoUrl": null,
+      "companion": "ALONE",
+      "situation": "AFTERNOON",
+      "aiTitle": "오후 햇살 속 망원동 골목",
+      "aiBody": "오후의 망원동을 천천히 걸었다. 골목마다 볕이 다르게 들었고, 걷는 동안 생각이 가라앉았다.",
+      "aiGenerationStatus": "SUCCESS",
+      "createdAt": "2026-08-11T14:40:00+09:00",
+      "updatedAt": "2026-08-11T14:45:00+09:00"
+    },
+    {
+      "id": "bbbbbbb1-0000-4000-8000-000000000002",
+      "userId": "11111111-1111-4111-8111-111111111111",
+      "candidateId": "aaaaaaa1-0000-4000-8000-000000000002",
+      "photoUrl": null,
+      "companion": "PET",
+      "situation": "MORNING",
+      "aiTitle": null,
+      "aiBody": null,
+      "aiGenerationStatus": "PENDING",
+      "createdAt": "2026-08-12T08:45:00+09:00",
+      "updatedAt": "2026-08-12T08:45:00+09:00"
+    }
+  ],
+
+  "experienceDraftEmotions": [
+    { "draftId": "bbbbbbb1-0000-4000-8000-000000000001", "emotion": "CALM" },
+    { "draftId": "bbbbbbb1-0000-4000-8000-000000000001", "emotion": "PENSIVE" },
+    { "draftId": "bbbbbbb1-0000-4000-8000-000000000002", "emotion": "REFRESHED" }
+  ],
+
+  "walkExperiences": [
+    {
+      "id": "ccccccc1-0000-4000-8000-000000000001",
+      "userId": "11111111-1111-4111-8111-111111111111",
+      "draftId": "bbbbbbb1-0000-4000-8000-000000000001",
+      "title": "오후 햇살 속 망원동 골목",
+      "body": "오후의 망원동을 천천히 걸었다. 골목마다 볕이 다르게 들었고, 걷는 동안 생각이 가라앉았다.",
+      "photoUrl": null,
+      "startedAt": "2026-08-11T14:02:00+09:00",
+      "endedAt": "2026-08-11T14:38:00+09:00",
+      "durationSeconds": 2160,
+      "locationSummary": "망원동",
+      "companion": "ALONE",
+      "situation": "AFTERNOON",
+      "createdAt": "2026-08-11T14:46:00+09:00",
+      "updatedAt": "2026-08-11T14:46:00+09:00",
+      "deletedAt": null
+    }
+  ],
+
+  "walkExperienceEmotions": [
+    { "experienceId": "ccccccc1-0000-4000-8000-000000000001", "emotion": "CALM" },
+    { "experienceId": "ccccccc1-0000-4000-8000-000000000001", "emotion": "PENSIVE" }
+  ],
+
+  "walkExperienceTags": [
+    { "experienceId": "ccccccc1-0000-4000-8000-000000000001", "tag": "망원동" },
+    { "experienceId": "ccccccc1-0000-4000-8000-000000000001", "tag": "오후산책" },
+    { "experienceId": "ccccccc1-0000-4000-8000-000000000001", "tag": "혼자" }
+  ]
+}

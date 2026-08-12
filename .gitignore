@@ -166,3 +166,6 @@ expo-env.d.ts
 # macOS
 .DS_Store
 .vercel
+
+# mock backend working copy (seeded from mock/seed.json)
+mock/db.json
