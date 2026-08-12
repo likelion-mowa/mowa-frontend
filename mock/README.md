@@ -83,9 +83,46 @@ TypeScript를 Node에서 그대로 읽기 위해 npm 스크립트가 `--experime
 - 상태 전이는 `DETECTED → SUGGESTED → RECORDING | SKIPPED`만 허용합니다.
   명세 다이어그램을 그대로 따랐으므로 `DETECTED → RECORDING` 직행은 400입니다.
 
+### 명세가 정하지 않아 **내가 임의로 정한 것**
+
+위의 "다른 점"은 의도적으로 흉내만 낸 부분이고, 아래는 성격이 다릅니다.
+명세에 답이 없어서 한쪽으로 정한 것들이라 **실제 백엔드와 다를 수 있습니다.**
+
+이 mock은 명세에 대한 하나의 해석이고, 실제 백엔드는 같은 문서를 읽은 다른 사람의
+해석입니다. **클라이언트가 mock과 맞는다고 해서 백엔드와 맞는다는 뜻은 아닙니다.**
+
+| 항목 | 내가 정한 값 | 위험 |
+| --- | --- | --- |
+| `error.code` 문자열 | `NOT_FOUND` `BAD_REQUEST` `CONFLICT` `UNAUTHORIZED` `AI_GENERATION_FAILED` | 명세에 있는 건 `INVALID_CREDENTIALS` 하나뿐입니다. **`error.code`로 분기하는 코드는 깨집니다.** |
+| 생성 성공 코드 | `201` (Candidate·Draft·Experience) | 명세 미지정. 백엔드가 `200`일 수 있습니다. |
+| 오류 코드 선택 | RECORDING 아닌 Candidate에 Draft → `400` | 명세는 조건만 적고 코드를 안 정했습니다. `409`일 수도 있습니다. |
+| 상태 전이 엄격성 | `DETECTED → RECORDING` 직행을 `400`으로 거부 | 명세 다이어그램을 강제 규칙으로 읽었습니다. 예시일 뿐일 수 있습니다. |
+| 수정 불가 필드 | `startedAt` 등을 보내면 `400` | 명세는 "수정 범위에서 제외"라고만 합니다. 백엔드는 조용히 무시할 수 있습니다. |
+| 응답 봉투 적용 범위 | 전 엔드포인트에 적용 | 명세의 엔드포인트별 Response 블록은 필드만 나열합니다. 일관된 해석이지만 가정입니다. |
+| `emotions[]`·`tags[]` 순서 | 저장 순서 | 실제 SQL은 다른 순서로 줄 수 있습니다. **배열 순서에 의존하지 마세요.** |
+| `message` 문자열 | 전부 제가 씀 | 표시용으로 쓰지 마세요. |
+| AI 생성 지연 | 즉시 응답 | 실제로는 OpenAI 호출이라 수 초 걸립니다. **로딩 상태·타임아웃은 이 mock으로 검증되지 않습니다.** |
+| 동시성 | lowdb, 트랜잭션 없음. UNIQUE는 조회 후 삽입이라 경합에 취약 | 실제 DB는 제약조건으로 강제합니다. 단일 사용자 테스트로는 드러나지 않습니다. |
+
+**실무 지침**
+
+- `error.code`나 명세에 없는 status code로 분기하지 마세요. 봉투의 `success`와
+  명세가 명시한 코드(`401`, `404`, `409`, 쿼리 규칙 `400`)까지만 신뢰하세요.
+- 위 표는 백엔드 담당자와 맞춰야 할 목록입니다. 특히 `error.code`는 합의가 필요합니다.
+  (AGENTS.md: "Coordinate API request/response changes with the backend before merging.")
+
+### 반대로, 믿어도 되는 것
+
+명세가 **명시적으로 정한** 규칙은 그대로 구현했고 계약 테스트가 지키고 있습니다.
+
+필드 이름과 타입, 코드값 5종, `Candidate → Draft → Experience` 1:0..1 파이프라인,
+PATCH 의미론(생략=유지 / `null`=제거 / 배열=전체 교체), Soft delete 후 404와 재확정 409,
+소유권을 404로 숨기기, 토큰 없음·무효 시 401, 쿼리 조합 400 규칙, KST 날짜 경계,
+Snapshot 대상 필드, title·태그 길이와 개수 제한.
+
 ## 검증
 
-`npm run mock:test`는 서버를 별도 포트(4999)와 임시 db로 직접 띄운 뒤 70개 assertion을
+`npm run mock:test`는 서버를 별도 포트(4999)와 임시 db로 직접 띄운 뒤 71개 assertion을
 돌립니다. `npm run mock`이 켜져 있어도 안전하고, 개발용 `db.json`을 건드리지 않습니다.
 
 커버하는 것: 봉투 형태, 인증 401, 소유권 404, 상태 전이 400, Candidate/Draft/Experience

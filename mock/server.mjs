@@ -143,7 +143,26 @@ function validateEmotions(value) {
   return null;
 }
 
-/** Returns [normalizedTags, errorMessage]. */
+/**
+ * VARCHAR(255) in the real schema, so the DB rejects an over-long value on
+ * INSERT as well as UPDATE. Both routes go through here so the two cannot drift.
+ */
+function validateLocationSummary(value) {
+  if (value == null) return null;
+  if (typeof value !== 'string') return 'locationSummary는 문자열이어야 합니다.';
+  if (value.length > LIMITS.locationSummaryMaxLength) {
+    return `locationSummary는 최대 ${LIMITS.locationSummaryMaxLength}자입니다.`;
+  }
+  return null;
+}
+
+/**
+ * Returns [normalizedTags, errorMessage].
+ *
+ * Length is measured on the NORMALIZED value, because that is what the DB
+ * column actually stores — checking the raw string would reject "  <50 chars>  "
+ * that the real backend accepts after trimming.
+ */
 function validateTags(value) {
   if (!Array.isArray(value)) return [null, 'tags는 배열이어야 합니다.'];
   if (value.length > LIMITS.tagsMaxCount) {
@@ -152,13 +171,13 @@ function validateTags(value) {
   const out = [];
   for (const raw of value) {
     if (typeof raw !== 'string') return [null, '태그는 문자열이어야 합니다.'];
-    if (raw.trim().replace(/^#+/, '').trim().length === 0) {
-      return [null, '빈 태그는 허용되지 않습니다.'];
-    }
-    if (raw.replace(/^#+/, '').length > LIMITS.tagMaxLength) {
+    const normalized = normalizeTag(raw);
+    if (normalized === null) return [null, '빈 태그는 허용되지 않습니다.'];
+    // normalizeTag slices to the limit, so compare against the pre-slice length.
+    if (raw.trim().replace(/^#+/, '').trim().length > LIMITS.tagMaxLength) {
       return [null, `태그는 최대 ${LIMITS.tagMaxLength}자입니다.`];
     }
-    out.push(normalizeTag(raw));
+    out.push(normalized);
   }
   if (new Set(out).size !== out.length) return [null, '중복된 태그는 허용되지 않습니다.'];
   return [out, null];
@@ -252,9 +271,8 @@ app.post(api('/walk-candidates'), authenticate, (req, res) => {
   const { detectedStartAt, locationSummary } = req.body ?? {};
   if (detectedStartAt === undefined) return badRequest(res, 'detectedStartAt은 필수입니다.');
   if (!isIsoDateTime(detectedStartAt)) return badRequest(res, 'detectedStartAt 형식이 올바르지 않습니다.');
-  if (locationSummary != null && typeof locationSummary !== 'string') {
-    return badRequest(res, 'locationSummary는 문자열이어야 합니다.');
-  }
+  const locationError = validateLocationSummary(locationSummary);
+  if (locationError) return badRequest(res, locationError);
 
   const candidate = {
     id: uuid(),
@@ -316,13 +334,9 @@ app.patch(api('/walk-candidates/:candidateId'), authenticate, (req, res) => {
     }
   }
 
-  if (has(body, 'locationSummary') && body.locationSummary != null) {
-    if (typeof body.locationSummary !== 'string') {
-      return badRequest(res, 'locationSummary는 문자열이어야 합니다.');
-    }
-    if (body.locationSummary.length > LIMITS.locationSummaryMaxLength) {
-      return badRequest(res, `locationSummary는 최대 ${LIMITS.locationSummaryMaxLength}자입니다.`);
-    }
+  if (has(body, 'locationSummary')) {
+    const locationError = validateLocationSummary(body.locationSummary);
+    if (locationError) return badRequest(res, locationError);
   }
 
   for (const key of ['detectedEndAt', 'durationSeconds', 'locationSummary', 'status']) {

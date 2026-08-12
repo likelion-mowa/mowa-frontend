@@ -151,6 +151,12 @@ try {
   const badStart = await call('POST', '/walk-candidates', { token, body: { detectedStartAt: 'not-a-date' } });
   check('잘못된 시각 형식 → 400', badStart.status === 400);
 
+  // VARCHAR(255) is enforced on INSERT too, not only on UPDATE.
+  const longPlace = await call('POST', '/walk-candidates', {
+    token, body: { detectedStartAt: '2026-08-12T13:00:00+09:00', locationSummary: '가'.repeat(256) },
+  });
+  check('생성 시 locationSummary 256자 → 400', longPlace.status === 400, `got ${longPlace.status}`);
+
   const created = await call('POST', '/walk-candidates', {
     token, body: { detectedStartAt: '2026-08-12T13:00:00+09:00', locationSummary: '망원동' },
   });
