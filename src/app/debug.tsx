@@ -400,9 +400,25 @@ export default function SmokeScreen() {
               })
             }
           />
+          <Button
+            title="Synthetic FINISHED walk (20 min, with end)"
+            onPress={() => {
+              const endedAtMs = Date.now();
+              void flow.handleWalkEvent({
+                id: `debug-${endedAtMs}`,
+                startedAtMs: endedAtMs - 20 * 60 * 1000,
+                endedAtMs,
+                steps: 1200,
+                source: 'stub',
+              });
+            }}
+          />
           <Text className="mt-2 text-xs text-neutral-500">
             Calls the store handler directly, so it works on web too. On iOS,
             emitTestEvent above reaches the same flow through the real subscription.
+            The second button is the shape a real detection now has — the detector
+            fires once, after the walk ended — so it exercises the end-value PATCH
+            that a walk-less environment otherwise cannot reach.
           </Text>
           {flow.log.map((line, i) => (
             <Text key={i} className="font-mono text-xs text-neutral-700">
