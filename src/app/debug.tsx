@@ -20,6 +20,7 @@ import {
   endpoints,
 } from '@/api/types';
 import { useDiagnostics } from '@/stores/diagnostics-store';
+import { useWalkCandidateFlow } from '@/stores/walk-candidate-store';
 
 /**
  * Environment smoke screen.
@@ -65,6 +66,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 export default function SmokeScreen() {
   const state = useDiagnostics();
   const { append, set } = state;
+  const flow = useWalkCandidateFlow();
 
   /** Unwraps an AdapterResult into the log, returning the value on success. */
   const run = useCallback(
@@ -369,6 +371,44 @@ export default function SmokeScreen() {
             label="situation"
             value={SITUATIONS.map((s) => `${s}=${SITUATION_LABELS[s]}`).join(' ')}
           />
+        </Section>
+
+        <Section title="6 · Candidate flow (POST /walk-candidates)">
+          <Row label="auth" value={flow.authState} />
+          <Row
+            label="last detection"
+            value={
+              flow.lastDetection
+                ? `${flow.lastDetection.id.slice(0, 14)}… steps=${flow.lastDetection.steps}`
+                : '—'
+            }
+          />
+          <Row label="last candidateId" value={flow.lastDetection?.candidateId ?? '—'} />
+          <Button
+            title="Mock login (env creds)"
+            onPress={() => void flow.loginWithEnvCredentials()}
+          />
+          <Button
+            title="Synthetic walk event (JS) → flow"
+            onPress={() =>
+              void flow.handleWalkEvent({
+                id: `debug-${Date.now()}`,
+                startedAtMs: Date.now(),
+                endedAtMs: null,
+                steps: 0,
+                source: 'stub',
+              })
+            }
+          />
+          <Text className="mt-2 text-xs text-neutral-500">
+            Calls the store handler directly, so it works on web too. On iOS,
+            emitTestEvent above reaches the same flow through the real subscription.
+          </Text>
+          {flow.log.map((line, i) => (
+            <Text key={i} className="font-mono text-xs text-neutral-700">
+              {line}
+            </Text>
+          ))}
         </Section>
 
         <Section title="Log">
