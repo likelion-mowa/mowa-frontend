@@ -17,4 +17,16 @@ export const notifications: NotificationsPort = {
   async requestPermission() {
     return { ok: false, error: 'Notifications are not supported on web in this app.' };
   },
+
+  setForegroundHandler() {
+    // Nothing to present: the web build never receives a walk notification.
+  },
+
+  async getInitialResponse() {
+    return { ok: true, value: null };
+  },
+
+  addResponseListener() {
+    return () => {};
+  },
 };

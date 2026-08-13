@@ -74,10 +74,36 @@ export interface HealthPort {
   getStepCountToday(): Promise<AdapterResult<number>>;
 }
 
+/**
+ * What a tap on the walk notification carries, from the `userInfo` the Core
+ * attaches in `postNotification` (path + issuedAtMs).
+ *
+ * Both fields are nullable because the payload crosses the native boundary
+ * untyped: a notification posted by an older build, or anything else that ever
+ * reaches this app, may carry neither.
+ */
+export type NotificationTapData = {
+  path: string | null;
+  issuedAtMs: number | null;
+};
+
 export interface NotificationsPort {
   readonly isAvailable: boolean;
   getPermission(): Promise<AdapterResult<PermissionState>>;
   requestPermission(): Promise<AdapterResult<PermissionState>>;
+  /**
+   * Presents notifications that arrive while the app is in the foreground.
+   * Without it iOS delivers them silently to the app and shows nothing.
+   * Idempotent — the handler is global, so calling twice just replaces it.
+   */
+  setForegroundHandler(): void;
+  /**
+   * The tap that launched the app, if any. A response listener alone MISSES
+   * cold-start taps (measured in the prior repo), so this must run at mount.
+   */
+  getInitialResponse(): Promise<AdapterResult<NotificationTapData | null>>;
+  /** Taps received while the app is already running. Returns the unsubscribe. */
+  addResponseListener(listener: (data: NotificationTapData) => void): () => void;
 }
 
 export type LocationPermission = {
