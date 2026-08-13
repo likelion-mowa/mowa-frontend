@@ -84,8 +84,9 @@ final class WalkDetectorCore: NSObject {
 
     // MARK: 의존성
 
-    private let pedometer = CMPedometer()
-    private let activityManager = CMMotionActivityManager()
+    // MOWA: var, not let — recreated on every start. See startMotionUpdates.
+    private var pedometer = CMPedometer()
+    private var activityManager = CMMotionActivityManager()
     private let locationManager = CLLocationManager()
     private let healthStore = HKHealthStore()
     private var observerQuery: HKObserverQuery?
@@ -93,6 +94,11 @@ final class WalkDetectorCore: NSObject {
     private var walkStartedAt: Date?
     private var walkBaselineSteps: Int?
     private var stepUpdatesActive = false
+    // MOWA: one-shot liveness markers so a dead CoreMotion subscription shows
+    // in the log within seconds of the next walk instead of after a silent
+    // 80-minute miss (2026-08-13).
+    private var loggedFirstActivityCallback = false
+    private var loggedFirstPedometerCallback = false
 
     private var thresholdSteps: Int {
         let stored = UserDefaults.standard.integer(forKey: Keys.threshold)
@@ -130,6 +136,20 @@ final class WalkDetectorCore: NSObject {
         // enable starts from silence.
         stopSensors()
 
+        // MOWA: one runloop tick between teardown and the new subscription. On
+        // 2026-08-13 a same-tick stop→start left activity delivery dead for an
+        // entire 80-min walk (2,097 locations flowed, zero CoreMotion
+        // callbacks) — suspected motiond-side ordering race; unproven, so this
+        // is paired with the liveness notices in startMotionUpdates.
+        DispatchQueue.main.async { [weak self] in
+            self?.startSelectedMechanism(mechanism, completion: completion)
+        }
+    }
+
+    private func startSelectedMechanism(
+        _ mechanism: Mechanism,
+        completion: @escaping (Result<Void, Error>) -> Void
+    ) {
         switch mechanism {
         case .coreLocationKeepAlive:
             guard CMMotionActivityManager.isActivityAvailable() else {
@@ -218,8 +238,25 @@ final class WalkDetectorCore: NSObject {
     }
 
     private func startMotionUpdates() {
+        // MOWA: fresh instances per start. Reusing one manager across
+        // stop/start cycles is a known source of silently-dead CoreMotion
+        // subscriptions, and a stale daemon-side client is one candidate for
+        // the 2026-08-13 silent 80-min walk. This also intentionally drops any
+        // startStepUpdates subscription — that path is unwired from TS.
+        activityManager.stopActivityUpdates()
+        activityManager = CMMotionActivityManager()
+        pedometer.stopUpdates()
+        pedometer = CMPedometer()
+        loggedFirstActivityCallback = false
+        loggedFirstPedometerCallback = false
+        Self.log.notice("motion_updates_started")
+
         activityManager.startActivityUpdates(to: .main) { [weak self] activity in
             guard let self, let activity else { return }
+            if !self.loggedFirstActivityCallback {
+                self.loggedFirstActivityCallback = true
+                Self.log.notice("motion_first_callback source=activity")
+            }
             self.handleActivity(activity)
         }
 
@@ -229,6 +266,10 @@ final class WalkDetectorCore: NSObject {
             let steps = data.numberOfSteps.intValue
             let distance = data.distance?.doubleValue
             DispatchQueue.main.async {
+                if !self.loggedFirstPedometerCallback {
+                    self.loggedFirstPedometerCallback = true
+                    Self.log.notice("motion_first_callback source=pedometer")
+                }
                 self.handlePedometer(steps: steps, distance: distance)
             }
         }
