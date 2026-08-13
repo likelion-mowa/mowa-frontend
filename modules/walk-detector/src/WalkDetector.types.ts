@@ -2,6 +2,11 @@
 export type WalkEvent = {
   id: string;
   startedAtMs: number;
+  /**
+   * Set on every real detection: a live event fires once the walk is over
+   * (the Core debounces the stationary period), and retrospective rows carry
+   * the segment's end. Null only on stub events from emitTestEvent.
+   */
   endedAtMs: number | null;
   steps: number;
   /** `stub` comes only from emitTestEvent; real detection emits `live` / `retrospective`. */

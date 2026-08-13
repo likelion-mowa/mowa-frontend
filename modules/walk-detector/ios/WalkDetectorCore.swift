@@ -45,6 +45,9 @@ final class WalkDetectorCore: NSObject {
         static let mechanism = "walk.mechanism"
         static let threshold = "walk.thresholdSteps"
         static let cooldown = "walk.cooldownSeconds"
+        // MOWA: stationary time that confirms a walk has ended (team decision
+        // 2026-08-13: 180 s — long enough to absorb crosswalk waits).
+        static let endDebounce = "walk.endDebounceSeconds"
         static let deepLinkPath = "walk.deepLinkPath"
         static let lastNotifiedAt = "walk.lastNotifiedAt"
         static let lastSeenSteps = "walk.lastSeenSteps"
@@ -93,6 +96,15 @@ final class WalkDetectorCore: NSObject {
 
     private var walkStartedAt: Date?
     private var walkBaselineSteps: Int?
+    // MOWA: end-of-walk session state. The notification moved from the 30-step
+    // threshold (early in the walk) to the debounced end, per the product flow
+    // "걷기 종료 추정 → 기록 제안 Push 전송" (2026-08-13). `stationarySince` holds
+    // the REAL stop moment (the activity row's startDate), not the debounce
+    // expiry — the walk's end time must not include the 180 s wait.
+    private var walkQualified = false
+    private var stationarySince: Date?
+    private var endDebounceWorkItem: DispatchWorkItem?
+    private var lastDistanceMeters: Double?
     private var stepUpdatesActive = false
     // MOWA: one-shot liveness markers so a dead CoreMotion subscription shows
     // in the log within seconds of the next walk instead of after a silent
@@ -107,6 +119,10 @@ final class WalkDetectorCore: NSObject {
     private var cooldownSeconds: TimeInterval {
         let stored = UserDefaults.standard.double(forKey: Keys.cooldown)
         return stored > 0 ? stored : 300
+    }
+    private var endDebounceSeconds: TimeInterval {
+        let stored = UserDefaults.standard.double(forKey: Keys.endDebounce)
+        return stored > 0 ? stored : 180
     }
     private var deepLinkPath: String {
         UserDefaults.standard.string(forKey: Keys.deepLinkPath) ?? "/walk"
@@ -123,11 +139,13 @@ final class WalkDetectorCore: NSObject {
         mechanism: Mechanism,
         thresholdSteps: Int,
         cooldownSeconds: Double,
+        endDebounceSeconds: Double,
         deepLinkPath: String,
         completion: @escaping (Result<Void, Error>) -> Void
     ) {
         UserDefaults.standard.set(thresholdSteps, forKey: Keys.threshold)
         UserDefaults.standard.set(cooldownSeconds, forKey: Keys.cooldown)
+        UserDefaults.standard.set(endDebounceSeconds, forKey: Keys.endDebounce)
         UserDefaults.standard.set(deepLinkPath, forKey: Keys.deepLinkPath)
 
         // MOWA: restoreIfNeeded re-arms the persisted mechanism at every launch,
@@ -297,35 +315,90 @@ final class WalkDetectorCore: NSObject {
         // confidence 로 거르지 않으면 차 안에서 "걷고 있습니다!" 알림이 날아갑니다.
         let isWalking = activity.walking && !activity.automotive && activity.confidence != .low
 
-        if isWalking, walkStartedAt == nil {
-            walkStartedAt = Date()
-            walkBaselineSteps = currentSteps
-            Self.log.notice("walk_started confidence=\(self.lastConfidenceLabel, privacy: .public)")
-        } else if !isWalking, activity.stationary, walkStartedAt != nil {
-            walkStartedAt = nil
-            walkBaselineSteps = nil
-            // MOWA: this reset was silent; a 2-min indoor walk chopped into 4
-            // sub-threshold segments with no trace (measured 2026-08-13).
-            Self.log.notice("walk_ended reason=stationary")
+        if isWalking {
+            if walkStartedAt == nil {
+                walkStartedAt = Date()
+                walkBaselineSteps = currentSteps
+                walkQualified = false
+                lastDistanceMeters = nil
+                Self.log.notice("walk_started confidence=\(self.lastConfidenceLabel, privacy: .public)")
+            } else if let pausedAt = stationarySince {
+                // MOWA: a stop shorter than the debounce belongs to the same
+                // walk — a crosswalk light, a shop window. Without this the
+                // walk would be cut into sub-threshold pieces (measured
+                // 2026-08-13: a 2-min indoor walk chopped into 4 silent ones).
+                cancelEndDebounce()
+                Self.log.notice("walk_resumed pausedFor=\(Int(Date().timeIntervalSince(pausedAt)))s")
+            }
+        } else if activity.stationary, walkStartedAt != nil, stationarySince == nil {
+            // MOWA: the walk may be over, but nothing is decided yet. The
+            // notification is a "기록 제안" for a FINISHED walk, so it waits for
+            // the debounce; the stop moment is kept for the event's end time.
+            stationarySince = activity.startDate
+            scheduleEndDebounce()
+            Self.log.notice("walk_pausing debounce=\(Int(self.endDebounceSeconds))s")
         }
     }
 
-    private func handlePedometer(steps: Int, distance: Double?) {
-        currentSteps = steps
-        if stepUpdatesActive { onStepUpdate?(steps, nil) }
+    // MARK: 산책 종료 확정
 
-        guard let startedAt = walkStartedAt, let baseline = walkBaselineSteps else { return }
-        let walked = steps - baseline
-        guard walked >= thresholdSteps else { return }
-        guard passesCooldown() else { return }
+    private func scheduleEndDebounce() {
+        guard let pausedAt = stationarySince else { return }
+        endDebounceWorkItem?.cancel()
+        // The row may arrive late (batched delivery after a suspension), so the
+        // wait counts from the stop itself — a stop we only hear about 20 min
+        // later is already confirmed.
+        let delay = max(0, endDebounceSeconds - Date().timeIntervalSince(pausedAt))
+        let item = DispatchWorkItem { [weak self] in self?.confirmWalkEnd() }
+        endDebounceWorkItem = item
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: item)
+    }
 
-        let now = Date()
+    private func cancelEndDebounce() {
+        endDebounceWorkItem?.cancel()
+        endDebounceWorkItem = nil
+        stationarySince = nil
+    }
+
+    private func resetWalkSession() {
+        cancelEndDebounce()
+        walkStartedAt = nil
+        walkBaselineSteps = nil
+        walkQualified = false
+        lastDistanceMeters = nil
+    }
+
+    /// The product's detection moment: the stationary debounce expired, so the
+    /// walk is over. This is where a qualified walk becomes a JS event and,
+    /// unless the cooldown suppresses it, the 기록 제안 notification.
+    private func confirmWalkEnd() {
+        endDebounceWorkItem = nil
+        guard isEnabled, let startedAt = walkStartedAt, let baseline = walkBaselineSteps else {
+            resetWalkSession()
+            return
+        }
+
+        // The walk ended when the user stopped, not when this timer fired —
+        // otherwise every duration would carry the debounce as walking time.
+        let endedAt = max(stationarySince ?? Date(), startedAt)
+        let walked = currentSteps - baseline
+
+        guard walkQualified else {
+            // Silent suppression was the most expensive failure class in the
+            // prior repo; a walk that fails the bar still leaves a trace.
+            Self.log.notice("walk_ended reason=sub-threshold steps=\(walked)")
+            resetWalkSession()
+            return
+        }
+
         let event: [String: Any] = [
-            "id": "live-\(Int(now.timeIntervalSince1970))",
+            // Keyed on the walk's start: one id per walk, stable across a
+            // client retry (SQLite stores detections by this id).
+            "id": "live-\(Int(startedAt.timeIntervalSince1970))",
             "startedAtMs": startedAt.timeIntervalSince1970 * 1000,
-            "endedAtMs": NSNull(),
+            "endedAtMs": endedAt.timeIntervalSince1970 * 1000,
             "steps": walked,
-            "distanceMeters": distance ?? NSNull(),
+            "distanceMeters": lastDistanceMeters ?? NSNull(),
             "confidence": lastConfidenceLabel,
             "detection": "live",
         ]
@@ -338,16 +411,41 @@ final class WalkDetectorCore: NSObject {
         case .background: stateLabel = "background"
         @unknown default: stateLabel = "?"
         }
-        Self.log.notice("walk_detected steps=\(walked) appState=\(stateLabel, privacy: .public)")
+        let duration = Int(endedAt.timeIntervalSince(startedAt))
+        Self.log.notice("walk_detected steps=\(walked) duration=\(duration)s appState=\(stateLabel, privacy: .public)")
 
-        // MOWA: the observer's live-covered suppression keys off this timestamp.
-        UserDefaults.standard.set(now.timeIntervalSince1970, forKey: Keys.lastLiveNotifiedAt)
-
-        // 알림은 **여기 네이티브에서** 발송합니다. JS 가 떠 있는지와 무관하게 동작해야 하므로.
-        postNotification(steps: walked, issuedAt: now)
-
-        // 웹뷰가 살아 있으면 화면 갱신용으로도 올려보냅니다 (없어도 무방).
+        // JS hears about every detection, including one whose notification the
+        // cooldown suppresses: the candidate record and notification-spam
+        // control are separate concerns.
         onWalkDetected?(event)
+
+        if passesCooldown() {
+            let now = Date()
+            // MOWA: the observer's live-covered suppression keys off this timestamp.
+            UserDefaults.standard.set(now.timeIntervalSince1970, forKey: Keys.lastLiveNotifiedAt)
+            // 알림은 **여기 네이티브에서** 발송합니다. JS 가 떠 있는지와 무관하게 동작해야 하므로.
+            postNotification(steps: walked, issuedAt: now)
+        }
+
+        resetWalkSession()
+    }
+
+    private func handlePedometer(steps: Int, distance: Double?) {
+        currentSteps = steps
+        if stepUpdatesActive { onStepUpdate?(steps, nil) }
+
+        guard walkStartedAt != nil, let baseline = walkBaselineSteps else { return }
+        // Cumulative since startUpdates, not since this walk — unchanged from
+        // the threshold-fire version, and nothing in JS reads it today.
+        if let distance { lastDistanceMeters = distance }
+
+        // MOWA: crossing the threshold no longer notifies. It only marks the
+        // walk as worth reporting; confirmWalkEnd decides when (and whether)
+        // anything is sent, because the push proposes recording a FINISHED walk.
+        let walked = steps - baseline
+        guard walked >= thresholdSteps, !walkQualified else { return }
+        walkQualified = true
+        Self.log.notice("walk_qualified steps=\(walked)")
     }
 
     private func passesCooldown() -> Bool {
@@ -534,8 +632,9 @@ final class WalkDetectorCore: NSObject {
             self.observerQuery = nil
         }
         healthStore.disableAllBackgroundDelivery { _, _ in }
-        walkStartedAt = nil
-        walkBaselineSteps = nil
+        // Drops any pending end-debounce too: a walk whose sensors are gone can
+        // never be confirmed, and a stale timer would fire against a new session.
+        resetWalkSession()
     }
 
     func disable() {

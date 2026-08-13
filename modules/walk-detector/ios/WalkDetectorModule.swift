@@ -9,8 +9,8 @@ import UIKit
  * wrapper only maps the repo's TS contract (start/stop/queryHistory/
  * getDiagnostics/emitTestEvent + onWalkDetected) onto the Core's API and
  * mirrors state to JS. The Core callbacks `onStepUpdate` and `onDeepLink` are
- * left unattached on purpose — the TS contract has no matching event, and
- * deep-link wiring is a later session.
+ * left unattached on purpose — the TS contract has no matching event, and taps
+ * reach JS through expo-notifications instead (src/adapters/notifications).
  */
 public class WalkDetectorModule: Module {
   public func definition() -> ModuleDefinition {
@@ -53,14 +53,17 @@ public class WalkDetectorModule: Module {
         // Fitness prompt (CoreMotion has no permission API) and
         // requestAlwaysAuthorization raises the location prompt; the observer
         // path raises the HealthKit read sheet instead. Threshold/cooldown are
-        // the measured defaults from the prior investigation. deepLinkPath
-        // rides in the notification payload but stays unwired until deep links
-        // land; "/" is the only product route that exists.
+        // the measured defaults from the prior investigation. endDebounce is
+        // how long the user must stay still before the walk counts as over —
+        // 180 s absorbs a crosswalk wait (team decision 2026-08-13), and the
+        // notification is delayed by exactly that much. deepLinkPath rides in
+        // the notification payload; JS routes the tap to it (_layout.tsx).
         WalkDetectorCore.shared.enable(
           mechanism: selected,
           thresholdSteps: 30,
           cooldownSeconds: 300,
-          deepLinkPath: "/"
+          endDebounceSeconds: 180,
+          deepLinkPath: "/walk"
         ) { result in
           switch result {
           case .success:
@@ -187,8 +190,9 @@ public class WalkDetectorModule: Module {
  *
  * Deliberately does NOT touch UNUserNotificationCenter.delegate —
  * expo-notifications owns it, and notification authorization is requested from
- * JS (src/adapters/notifications). Tap responses will reach JS via
- * getLastNotificationResponseAsync() once deep links get wired.
+ * JS (src/adapters/notifications). Tap responses reach JS through that adapter:
+ * getLastNotificationResponse() for a cold-start tap plus a response listener
+ * for a warm one, routed in src/app/_layout.tsx.
  */
 public class WalkDetectorAppDelegate: ExpoAppDelegateSubscriber {
   public func application(
