@@ -143,7 +143,17 @@ export const useWalkCandidateFlow = create<WalkCandidateFlowState>((set, get) =>
       append(`listWalks FAILED — ${stored.error}`);
       return null;
     }
-    return stored.value.find((walk) => walk.candidateId !== null) ?? null;
+    // Newest by END, not by start: a walk that began 20 minutes ago and just
+    // finished is the one the notification is about, even though a shorter
+    // walk stored before it may have started later.
+    return stored.value
+      .filter((walk) => walk.candidateId !== null)
+      .reduce<DetectedWalk | null>((newest, walk) => {
+        if (newest === null) return walk;
+        return (walk.endedAtMs ?? walk.startedAtMs) > (newest.endedAtMs ?? newest.startedAtMs)
+          ? walk
+          : newest;
+      }, null);
   };
 
   /**
