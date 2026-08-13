@@ -39,6 +39,17 @@ class WalkDetectorModule extends NativeModule<WalkDetectorModuleEvents> {
       mechanism: 'none',
       locationAuthorization: 'unavailable',
       warnings: [],
+      activity: '-',
+      confidence: '-',
+      currentSteps: 0,
+      walkActive: false,
+      walkStartedAtMs: null,
+      walkSteps: 0,
+      walkQualified: false,
+      stationarySinceMs: null,
+      endDebounceSeconds: 0,
+      lastActivityAtMs: null,
+      lastPedometerAtMs: null,
     };
   }
 

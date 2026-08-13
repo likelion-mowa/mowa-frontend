@@ -33,6 +33,12 @@ import { useWalkCandidateFlow } from '@/stores/walk-candidate-store';
  * Throwaway — delete once real screens land.
  */
 
+/** Sensor liveness reads better as "how long ago" than as a wall clock. */
+function agoLabel(epochMs: number | null): string {
+  if (epochMs === null) return 'never';
+  return `${Math.max(0, Math.round((Date.now() - epochMs) / 1000))}s ago`;
+}
+
 function Row({ label, value }: { label: string; value: string }) {
   return (
     <View className="flex-row items-center justify-between border-b border-neutral-200 py-2">
@@ -287,6 +293,55 @@ export default function SmokeScreen() {
               const d = await run('walkDetector.getDiagnostics', walkDetector.getDiagnostics());
               if (d) set('diagnostics', d);
             }}
+          />
+
+          <View className="h-4" />
+          <Text className="mb-1 text-xs font-semibold text-neutral-500">
+            walk session — why detection is quiet
+          </Text>
+          <Row
+            label="activity / confidence"
+            value={
+              state.diagnostics
+                ? `${state.diagnostics.activity} / ${state.diagnostics.confidence}`
+                : '—'
+            }
+          />
+          <Row
+            label="last activity callback"
+            value={agoLabel(state.diagnostics?.lastActivityAtMs ?? null)}
+          />
+          <Row
+            label="last pedometer callback"
+            value={agoLabel(state.diagnostics?.lastPedometerAtMs ?? null)}
+          />
+          <Row
+            label="walk session"
+            value={
+              state.diagnostics
+                ? state.diagnostics.walkActive
+                  ? `active · ${state.diagnostics.walkSteps} steps${state.diagnostics.walkQualified ? ' · qualified' : ''}`
+                  : 'none'
+                : '—'
+            }
+          />
+          <Row
+            label="ending in"
+            value={
+              state.diagnostics == null || state.diagnostics.stationarySinceMs == null
+                ? '—'
+                : `${Math.max(
+                    0,
+                    Math.round(
+                      state.diagnostics.endDebounceSeconds -
+                        (Date.now() - state.diagnostics.stationarySinceMs) / 1000,
+                    ),
+                  )}s`
+            }
+          />
+          <Row
+            label="total steps since start"
+            value={state.diagnostics ? String(state.diagnostics.currentSteps) : '—'}
           />
 
           <View className="h-4" />

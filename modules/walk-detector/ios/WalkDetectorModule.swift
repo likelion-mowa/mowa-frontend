@@ -132,6 +132,19 @@ public class WalkDetectorModule: Module {
           "mechanism": (status["mechanism"] as? String) ?? "none",
           "locationAuthorization": (status["locationAuthorization"] as? String) ?? "unknown",
           "warnings": (status["warnings"] as? [String]) ?? [],
+          // Walk-session state, passed through verbatim: /debug is where a
+          // silent detector has to explain itself.
+          "activity": (status["activity"] as? String) ?? "-",
+          "confidence": (status["confidence"] as? String) ?? "-",
+          "currentSteps": (status["currentSteps"] as? Int) ?? 0,
+          "walkActive": (status["walkActive"] as? Bool) ?? false,
+          "walkStartedAtMs": status["walkStartedAtMs"] ?? NSNull(),
+          "walkSteps": (status["walkSteps"] as? Int) ?? 0,
+          "walkQualified": (status["walkQualified"] as? Bool) ?? false,
+          "stationarySinceMs": status["stationarySinceMs"] ?? NSNull(),
+          "endDebounceSeconds": (status["endDebounceSeconds"] as? Double) ?? 0,
+          "lastActivityAtMs": status["lastActivityAtMs"] ?? NSNull(),
+          "lastPedometerAtMs": status["lastPedometerAtMs"] ?? NSNull(),
         ] as [String: Any])
       }
     }

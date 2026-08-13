@@ -106,6 +106,11 @@ final class WalkDetectorCore: NSObject {
     private var endDebounceWorkItem: DispatchWorkItem?
     private var lastDistanceMeters: Double?
     private var stepUpdatesActive = false
+    // MOWA: sensor liveness, surfaced through statusPayload. Answering "is the
+    // detector silent because nothing happened, or because a subscription
+    // died?" used to need a root-only 300 MB device log archive (2026-08-14).
+    private var lastActivityAt: Date?
+    private var lastPedometerAt: Date?
     // MOWA: one-shot liveness markers so a dead CoreMotion subscription shows
     // in the log within seconds of the next walk instead of after a silent
     // 80-minute miss (2026-08-13).
@@ -296,6 +301,7 @@ final class WalkDetectorCore: NSObject {
     // MARK: 판정
 
     private func handleActivity(_ activity: CMMotionActivity) {
+        lastActivityAt = Date()
         let labels = [
             activity.walking ? "walking" : nil,
             activity.running ? "running" : nil,
@@ -431,6 +437,7 @@ final class WalkDetectorCore: NSObject {
     }
 
     private func handlePedometer(steps: Int, distance: Double?) {
+        lastPedometerAt = Date()
         currentSteps = steps
         if stepUpdatesActive { onStepUpdate?(steps, nil) }
 
@@ -739,6 +746,16 @@ final class WalkDetectorCore: NSObject {
         if ProcessInfo.processInfo.isLowPowerModeEnabled {
             warnings.append("저전력 모드가 켜져 있습니다 — 백그라운드 실행이 억제되어 측정이 오염됩니다.")
         }
+        // MOWA: the silent-death check. On 2026-08-13 locationd delivered 2,097
+        // updates through an 80-minute walk while CoreMotion produced zero
+        // callbacks; nothing on screen said so. 10 min is well past any normal
+        // gap — activity rows arrive whenever the classification changes.
+        if isEnabled, mechanism != .healthKitObserver {
+            let since = lastActivityAt.map { Date().timeIntervalSince($0) }
+            if since == nil || since! > 600 {
+                warnings.append("동작 분류 콜백이 \(since.map { "\(Int($0))초째" } ?? "한 번도") 없습니다 — CoreMotion 구독이 조용히 죽었을 수 있습니다. 감지를 다시 시작해 보세요.")
+            }
+        }
 
         let motionAuth: String
         switch CMMotionActivityManager.authorizationStatus() {
@@ -764,7 +781,28 @@ final class WalkDetectorCore: NSObject {
             "locationAuthorization": locationAuth,
             "motionAuthorization": motionAuth,
             "warnings": warnings,
+            // Walk-session state. Detection can only be silent for a few
+            // reasons, and these separate them: no walking classification
+            // (activity/confidence), a dead subscription (lastActivityAtMs /
+            // lastPedometerAtMs), a walk under the step bar (walkSteps /
+            // walkQualified), or an end still being debounced (stationarySinceMs).
+            "activity": lastActivityLabel,
+            "confidence": lastConfidenceLabel,
+            "currentSteps": currentSteps,
+            "walkActive": walkStartedAt != nil,
+            "walkStartedAtMs": Self.epochMsOrNull(walkStartedAt),
+            "walkSteps": walkBaselineSteps.map { currentSteps - $0 } ?? 0,
+            "walkQualified": walkQualified,
+            "stationarySinceMs": Self.epochMsOrNull(stationarySince),
+            "endDebounceSeconds": endDebounceSeconds,
+            "lastActivityAtMs": Self.epochMsOrNull(lastActivityAt),
+            "lastPedometerAtMs": Self.epochMsOrNull(lastPedometerAt),
         ]
+    }
+
+    private static func epochMsOrNull(_ date: Date?) -> Any {
+        guard let date else { return NSNull() }
+        return date.timeIntervalSince1970 * 1000
     }
 
     /// 앱이 꺼져 있던 동안의 걷기를 소급 조회합니다.
