@@ -103,7 +103,18 @@ export const api = {
     return requestJson<WalkCandidate>('POST', endpoints.walkCandidates(), body);
   },
 
-  /** No app caller yet — PR B's suggestion screen owns the status transitions. */
+  /**
+   * The suggestion screen re-reads the candidate on entry: a notification can
+   * be tapped long after the walk was already kept or skipped, and the server
+   * status is the only way to tell (there is no list endpoint to reconcile
+   * against — docs/api-implementation.md 공백 1).
+   */
+  getWalkCandidate(candidateId: Uuid): Promise<ApiResult<WalkCandidate>> {
+    return requestJson<WalkCandidate>('GET', endpoints.walkCandidate(candidateId));
+  },
+
+  /** Callers live in walk-candidate-store: end values on detection, then the
+   * SUGGESTED / RECORDING / SKIPPED transitions the suggestion screen drives. */
   updateWalkCandidate(
     candidateId: Uuid,
     body: UpdateWalkCandidateRequest,
