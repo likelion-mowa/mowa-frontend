@@ -21,10 +21,12 @@ export type WalkEvent = {
  * Mechanism selectable from JS when starting detection. Mirrors Swift
  * `WalkDetectorCore.Mechanism` minus `none` (that value is the Core's internal
  * "disabled" state, not something JS may request).
+ * 'layered' = keepalive as the live detector + observer as a missed-walk safety
+ * net, with double-notification arbitration in the Core.
  * ⚠️ The string values cross the bridge unchecked — tsc cannot catch drift
  * against the Swift enum's raw values.
  */
-export type WalkMechanism = 'core-location-keepalive' | 'healthkit-observer';
+export type WalkMechanism = 'core-location-keepalive' | 'healthkit-observer' | 'layered';
 
 /**
  * Values only the native side can know. Used to prove the JS <-> Swift bridge is
@@ -41,7 +43,7 @@ export type WalkDetectorDiagnostics = {
   /**
    * Required (not optional) on purpose: both web implementations must construct
    * the full object, so tsc is what forces them to stay in sync with this type.
-   * 'core-location-keepalive' | 'healthkit-observer' | 'none'
+   * 'core-location-keepalive' | 'healthkit-observer' | 'layered' | 'none'
    */
   mechanism: string;
   /** 'always' | 'whenInUse' | 'denied' | 'notDetermined' | 'unknown' | 'unavailable' */

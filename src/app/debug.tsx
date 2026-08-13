@@ -151,6 +151,14 @@ export default function SmokeScreen() {
             }}
           />
           <Button
+            title="Start (layered) — keepalive + observer net"
+            onPress={async () => {
+              await run("walkDetector.start('layered')", walkDetector.start('layered'));
+              const d = await run('walkDetector.getDiagnostics', walkDetector.getDiagnostics());
+              if (d) set('diagnostics', d);
+            }}
+          />
+          <Button
             title="Stop detector"
             onPress={async () => {
               await run('walkDetector.stop', walkDetector.stop());
@@ -159,9 +167,9 @@ export default function SmokeScreen() {
             }}
           />
           <Text className="mt-2 text-xs text-neutral-500">
-            start() does not stop a running mechanism — tap Stop before switching, or the
-            keepalive keeps the app resident and contaminates the observer latency
-            measurement. The first observer start also raises the HealthKit read sheet.
+            start() silences any previously running mechanism before starting the new one,
+            so switching needs no separate Stop. The first observer/layered start raises
+            the HealthKit read sheet.
           </Text>
 
           <View className="h-4" />

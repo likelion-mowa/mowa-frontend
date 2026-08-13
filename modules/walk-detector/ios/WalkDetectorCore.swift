@@ -48,11 +48,17 @@ final class WalkDetectorCore: NSObject {
         static let deepLinkPath = "walk.deepLinkPath"
         static let lastNotifiedAt = "walk.lastNotifiedAt"
         static let lastSeenSteps = "walk.lastSeenSteps"
+        // MOWA: safety-net arbitration state — see handleObserverFired.
+        static let lastLiveNotifiedAt = "walk.lastLiveNotifiedAt"
+        static let lastObserverFiredAt = "walk.lastObserverFiredAt"
     }
 
     enum Mechanism: String {
         case coreLocationKeepAlive = "core-location-keepalive"
         case healthKitObserver = "healthkit-observer"
+        // MOWA: keepalive as the live detector + observer as a missed-walk
+        // safety net (2026-08-13 measurement: observer lags walk-end 7–18 min).
+        case layered
         case none
     }
 
@@ -118,6 +124,12 @@ final class WalkDetectorCore: NSObject {
         UserDefaults.standard.set(cooldownSeconds, forKey: Keys.cooldown)
         UserDefaults.standard.set(deepLinkPath, forKey: Keys.deepLinkPath)
 
+        // MOWA: restoreIfNeeded re-arms the persisted mechanism at every launch,
+        // so a previous one may still be running here. Two sensor sets at once
+        // produced double notifications in the 2026-08-13 measurement — every
+        // enable starts from silence.
+        stopSensors()
+
         switch mechanism {
         case .coreLocationKeepAlive:
             guard CMMotionActivityManager.isActivityAvailable() else {
@@ -131,7 +143,28 @@ final class WalkDetectorCore: NSObject {
             completion(.success(()))
 
         case .healthKitObserver:
-            enableHealthKitObserver(completion: completion)
+            enableHealthKitObserver(finalMechanism: .healthKitObserver, completion: completion)
+
+        case .layered:
+            // MOWA: keepalive detects live; the observer only backstops walks
+            // the keepalive missed (arbitration in handleObserverFired).
+            guard CMMotionActivityManager.isActivityAvailable() else {
+                completion(.failure(DetectorError.unavailable(
+                    "CMMotionActivityManager.isActivityAvailable() == false — 시뮬레이터에는 모션 코프로세서가 없습니다. 실물 iPhone 이 필요합니다."
+                )))
+                return
+            }
+            startCoreLocationKeepAlive()
+            // Persist the working half first: if the observer part fails below,
+            // a relaunch restores keepalive-only instead of nothing.
+            persist(enabled: true, mechanism: .coreLocationKeepAlive)
+            enableHealthKitObserver(finalMechanism: .layered) { result in
+                if case .failure(let error) = result {
+                    // Keepalive stays up; reject so /debug shows the truth.
+                    Self.log.error("layered_degraded observer_failed=\(error.localizedDescription, privacy: .public)")
+                }
+                completion(result)
+            }
 
         case .none:
             completion(.failure(DetectorError.unavailable("메커니즘을 선택하세요.")))
@@ -230,6 +263,9 @@ final class WalkDetectorCore: NSObject {
         } else if !isWalking, activity.stationary, walkStartedAt != nil {
             walkStartedAt = nil
             walkBaselineSteps = nil
+            // MOWA: this reset was silent; a 2-min indoor walk chopped into 4
+            // sub-threshold segments with no trace (measured 2026-08-13).
+            Self.log.notice("walk_ended reason=stationary")
         }
     }
 
@@ -262,6 +298,9 @@ final class WalkDetectorCore: NSObject {
         @unknown default: stateLabel = "?"
         }
         Self.log.notice("walk_detected steps=\(walked) appState=\(stateLabel, privacy: .public)")
+
+        // MOWA: the observer's live-covered suppression keys off this timestamp.
+        UserDefaults.standard.set(now.timeIntervalSince1970, forKey: Keys.lastLiveNotifiedAt)
 
         // 알림은 **여기 네이티브에서** 발송합니다. JS 가 떠 있는지와 무관하게 동작해야 하므로.
         postNotification(steps: walked, issuedAt: now)
@@ -306,7 +345,12 @@ final class WalkDetectorCore: NSObject {
 
     // MARK: HealthKit 경로
 
-    private func enableHealthKitObserver(completion: @escaping (Result<Void, Error>) -> Void) {
+    // MOWA: finalMechanism lets the layered mode reuse this path — on success
+    // the Core records .layered instead of .healthKitObserver.
+    private func enableHealthKitObserver(
+        finalMechanism: Mechanism,
+        completion: @escaping (Result<Void, Error>) -> Void
+    ) {
         guard HKHealthStore.isHealthDataAvailable() else {
             completion(.failure(DetectorError.unavailable("HealthKit 을 사용할 수 없습니다.")))
             return
@@ -334,9 +378,9 @@ final class WalkDetectorCore: NSObject {
                 DispatchQueue.main.async {
                     self.registerObserverQuery()
                     self.isEnabled = true
-                    self.mechanism = .healthKitObserver
-                    self.persist(enabled: true, mechanism: .healthKitObserver)
-                    Self.log.notice("enabled mechanism=healthkit-observer frequency=hourly")
+                    self.mechanism = finalMechanism
+                    self.persist(enabled: true, mechanism: finalMechanism)
+                    Self.log.notice("enabled mechanism=\(finalMechanism.rawValue, privacy: .public) frequency=hourly")
                     completion(.success(()))
                 }
             }
@@ -364,6 +408,15 @@ final class WalkDetectorCore: NSObject {
 
     private func handleObserverFired() {
         guard let stepType = HKQuantityType.quantityType(forIdentifier: .stepCount) else { return }
+
+        // MOWA: safety-net arbitration state. A live notification between the
+        // previous fire and this one proves the keepalive layer is alive, so
+        // the observer must stay silent below — cooldown alone cannot dedupe
+        // (measured 2026-08-13: the two paths notified 418 s apart against a
+        // 300 s cooldown).
+        let previousFireAt = UserDefaults.standard.double(forKey: Keys.lastObserverFiredAt)
+        UserDefaults.standard.set(Date().timeIntervalSince1970, forKey: Keys.lastObserverFiredAt)
+
         let end = Date()
         let start = end.addingTimeInterval(-2 * 3600)
         let predicate = HKQuery.predicateForSamples(withStart: start, end: end)
@@ -372,15 +425,25 @@ final class WalkDetectorCore: NSObject {
             quantityType: stepType,
             quantitySamplePredicate: predicate,
             options: .cumulativeSum
-        ) { [weak self] _, statistics, _ in
+        ) { [weak self] _, statistics, error in
             guard let self else { return }
             // ⚠️ 기기가 잠겨 있으면 HealthKit 을 읽을 수 없습니다
             // (Protected Unless Open, 잠금 ~10분 후 차단). 값이 없는 것과 걸음이 0인 것을
             // 구분해서 기록해야 나중에 결과를 오해하지 않습니다.
-            guard let sum = statistics?.sumQuantity()?.doubleValue(for: .count()) else {
-                Self.log.notice("observer_read_failed (기기 잠금 중일 수 있음)")
-                return
+            // MOWA: the error param used to be dropped, which conflated "no
+            // samples in the window" with "device locked" — and the empty
+            // window then blocked the first baseline (measured 11:43,
+            // 2026-08-13). errorNoData IS a valid answer: the window sum is 0.
+            if let error {
+                let nsError = error as NSError
+                let isNoData = nsError.domain == HKErrorDomain
+                    && nsError.code == HKError.Code.errorNoData.rawValue
+                if !isNoData {
+                    Self.log.notice("observer_read_failed error=\(error.localizedDescription, privacy: .public) (기기 잠금 중일 수 있음)")
+                    return
+                }
             }
+            let sum = statistics?.sumQuantity()?.doubleValue(for: .count()) ?? 0
 
             // MOWA: upstream bug fix (03-findings.md 알려진 버그 #2). double(forKey:)
             // returns 0 for a missing key, so the very first observer fire treated
@@ -397,7 +460,19 @@ final class WalkDetectorCore: NSObject {
             let delta = sum - previous
             Self.log.notice("observer_steps total=\(sum) delta=\(delta)")
 
-            guard delta >= Double(self.thresholdSteps), self.passesCooldown() else { return }
+            guard delta >= Double(self.thresholdSteps) else { return }
+
+            // MOWA: the live layer already told the user about this walk.
+            // Known gap: if the keepalive dies BETWEEN two walks inside one
+            // fire interval, the second walk is absorbed here — accepted; the
+            // net targets "keepalive silently dead for hours", not that race.
+            let lastLive = UserDefaults.standard.double(forKey: Keys.lastLiveNotifiedAt)
+            if lastLive > previousFireAt {
+                Self.log.notice("notification_suppressed reason=live-covered lastLive=\(lastLive)")
+                return
+            }
+
+            guard self.passesCooldown() else { return }
             self.postNotification(steps: Int(delta), issuedAt: Date())
         }
         healthStore.execute(query)
@@ -405,7 +480,9 @@ final class WalkDetectorCore: NSObject {
 
     // MARK: 비활성화 · 복구
 
-    func disable() {
+    // MOWA: extracted from disable() so enable() can silence a previously
+    // restored mechanism before starting a new one (double-notification fix).
+    private func stopSensors() {
         activityManager.stopActivityUpdates()
         pedometer.stopUpdates()
         locationManager.stopUpdatingLocation()
@@ -416,12 +493,15 @@ final class WalkDetectorCore: NSObject {
             self.observerQuery = nil
         }
         healthStore.disableAllBackgroundDelivery { _, _ in }
+        walkStartedAt = nil
+        walkBaselineSteps = nil
+    }
 
+    func disable() {
+        stopSensors()
         persist(enabled: false, mechanism: .none)
         isEnabled = false
         mechanism = .none
-        walkStartedAt = nil
-        walkBaselineSteps = nil
         Self.log.notice("disabled")
     }
 
@@ -442,6 +522,17 @@ final class WalkDetectorCore: NSObject {
             registerObserverQuery()
             isEnabled = true
             mechanism = .healthKitObserver
+        case .layered:
+            // MOWA: restore both halves; a missing Always grant degrades to
+            // observer-only rather than dropping the whole layer.
+            if locationManager.authorizationStatus == .authorizedAlways {
+                startCoreLocationKeepAlive()
+            } else {
+                Self.log.notice("restore_degraded reason=not-always-authorized keepalive=skipped")
+            }
+            registerObserverQuery()
+            isEnabled = true
+            mechanism = .layered
         case .none:
             break
         }
