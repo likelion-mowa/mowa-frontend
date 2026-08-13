@@ -34,6 +34,11 @@ const MUST_BE_PRESENT = [
   ['endpoint /walk-experiences', '/walk-experiences'],
   ['endpoint /experience-drafts', '/experience-drafts'],
   ['Korean label 생각에 잠긴', '생각에 잠긴'],
+  // The suggestion screen's two spec-mandated button labels. A screen whose
+  // import graph broke would still export an HTML file, so the proof that
+  // /walk actually shipped is its copy being in the JS bundle.
+  ['/walk button 남기기', '남기기'],
+  ['/walk button 건너뛰기', '건너뛰기'],
 ];
 
 let bundles;
