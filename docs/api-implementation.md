@@ -5,7 +5,7 @@
 > 명세 원본: `docs/backend/api-spec.md` (최종 MVP API 14개). 계약 타입·경로 상수는
 > `src/api/types.ts`, HTTP 클라이언트는 `src/api/client.ts`.
 
-기준 시점: PR A `feature/walk-candidate-flow` (2026-08-13).
+기준 시점: PR B `feature/walk-suggestion` (2026-08-13).
 
 ## 범례
 
@@ -20,9 +20,9 @@
 | 1 | 로그인 (기능 13) | POST | `/auth/login` | ✅ | `client.ts` `login`. `walk-candidate-store`가 `EXPO_PUBLIC_MOCK_LOGIN_ID/PASSWORD` 있을 때 dev 자동 로그인, /debug에 수동 버튼. 로그인 화면 UI는 별도 태스크(팀 소유) |
 | 2 | 내 정보 조회 (기능 13) | GET | `/users/me` | ⬜ | 마이페이지 단계에서 |
 | 3 | 내 정보 수정 (기능 13) | PATCH | `/users/me` | ⬜ | 〃 (닉네임만) |
-| 4 | 산책 후보 생성 (기능 1) | POST | `/walk-candidates` | ✅ | `client.ts` `createWalkCandidate`. 감지 플로우(`walk-candidate-store`)가 WalkEvent 수신 시 호출, 받은 candidateId를 SQLite `walks.candidateId`에 스탬핑. POST 실패 시에도 감지는 candidateId=null로 로컬 보존 |
-| 5 | 산책 후보 조회 (기능 1) | GET | `/walk-candidates/{candidateId}` | ⬜ | 검증에서 curl로만 사용. 후보 데이터는 로컬 보관이 1차라, PR B(제안 화면)에서 서버 재조회 필요성 판단 |
-| 6 | 산책 후보 변경 (기능 1) | PATCH | `/walk-candidates/{candidateId}` | 🔧 | `client.ts` `updateWalkCandidate`. 호출자는 PR B — 제안 화면 진입 시 `SUGGESTED`, 남기기 `RECORDING`, 건너뛰기 `SKIPPED`, 종료값(detectedEndAt·durationSeconds) 갱신 |
+| 4 | 산책 후보 생성 (기능 1) | POST | `/walk-candidates` | ✅ | `client.ts` `createWalkCandidate`. 감지 플로우(`walk-candidate-store`)가 WalkEvent 수신 시 호출. 감지기가 **산책 종료를 판정한 뒤** 1회 발화하므로 POST 시점도 산책 종료 직후이고, 받은 candidateId를 SQLite `walks.candidateId`에 스탬핑. POST 실패 시에도 감지는 candidateId=null로 로컬 보존 |
+| 5 | 산책 후보 조회 (기능 1) | GET | `/walk-candidates/{candidateId}` | ✅ | `client.ts` `getWalkCandidate`. `/walk` 진입 시 서버 상태를 재확인해 스테일 탭(이미 `RECORDING`/`SKIPPED`)을 판별하고 홈으로 되돌린다. 목록 API가 없어 서버 상태를 아는 유일한 경로 |
+| 6 | 산책 후보 변경 (기능 1) | PATCH | `/walk-candidates/{candidateId}` | ✅ | `client.ts` `updateWalkCandidate`, 호출자는 전부 `walk-candidate-store`. ① 감지 직후 종료값(detectedEndAt·durationSeconds) ② `/walk` 진입 시 `SUGGESTED` ③ 남기기 `RECORDING`(종료값 없으면 동반 전송) ④ 건너뛰기 `SKIPPED` |
 | 7 | 경험 초안 생성 (기능 2) | POST | `/walk-candidates/{candidateId}/experience-drafts` | ⬜ | 일기 플로우 단계 |
 | 8 | 경험 초안 수정 (기능 2·3) | PATCH | `/experience-drafts/{draftId}` | ⬜ | 〃. emotions[]는 전체 교체 |
 | 9 | AI 일기 생성 (기능 4) | POST | `/experience-drafts/{draftId}/ai-generation` | ⬜ | 〃. 본문 없는 POST |
@@ -49,13 +49,19 @@
    로컬 보관해야 하고, 로컬 데이터 유실 시 서버의 후보를 되찾을 수 없다.
    → **처분: 보류.** 후보는 스테이징 데이터고, 과거 후보를 탐색하는 제품 기능이
    없다. 그런 기능이 생기는 시점에 목록 API를 백엔드에 요청한다.
-2. **산책 종료값의 출처가 미정이다.** 명세는 종료 판단을 클라이언트에 위임하고
+2. **산책 종료값의 출처가 미정이었다.** 명세는 종료 판단을 클라이언트에 위임하고
    ("기술 구현 단계에서 결정할 사항"), 기능 5는 종료 시각·지속 시간 없는
-   Candidate의 경험 확정을 거부한다. 감지기는 걷기 종료 시점에 JS로 아무 신호도
-   주지 않는다 (임계 도달 시 1회 발화, `endedAtMs: null`).
-   → **처분: API 계약 문제 아님 — PR B(제안 화면) 설계 때 클라이언트가 결정.**
-   후보: 화면 진입/탭 시각 · CMPedometer 회고 행(정확한 start/end 보유) ·
-   사용자 입력.
+   Candidate의 경험 확정을 거부한다.
+   → **처분: 확정 (2026-08-13, PR B). 감지기가 종료를 판정하고 그 값을 이벤트에
+   담아 보낸다.** 알림 발화 시점 자체를 바꿨다 — 예전에는 임계 30보 도달(산책
+   초반)에 알렸으나, 유저플로우가 "걷기 종료 추정 → 기록 제안 Push 전송"이므로
+   이제 **정지 180초 디바운스**로 종료를 확정한 뒤 1회 발화한다. 종료 시각은
+   디바운스가 끝난 시각이 아니라 **실제로 멈춘 시각**(CMMotionActivity stationary
+   행의 startDate)이고, `durationSeconds = round((종료 − 시작) / 1000)`이다.
+   180초보다 짧은 정지(신호 대기 등)는 같은 산책으로 흡수된다.
+   따라서 종료값은 후보 생성 직후 PATCH로 채워지고, `/walk` 진입 시 값이 비어
+   있으면 한 번 더 보정한다. 종료값 없는 감지(웹·`emitTestEvent` 스텁)에 한해
+   남기기 시각을 최후 폴백으로 쓰며, 어느 출처였는지 `endSource`로 로그에 남긴다.
 3. **`error.code` 어휘가 미공표다** (`INVALID_CREDENTIALS` 하나만 예시).
    → **처분: 비긴급.** HTTP 상태 분기로 동작 중. 공표되면 `types.ts`에 union 반영.
 4. **토큰 정책이 없다** (만료·갱신 규정 부재, 401 시 동작 미정의).
