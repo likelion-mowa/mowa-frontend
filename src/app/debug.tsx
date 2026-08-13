@@ -139,6 +139,30 @@ export default function SmokeScreen() {
               if (d) set('diagnostics', d);
             }}
           />
+          <Button
+            title="Start (healthkit-observer) — unmeasured"
+            onPress={async () => {
+              await run(
+                "walkDetector.start('healthkit-observer')",
+                walkDetector.start('healthkit-observer'),
+              );
+              const d = await run('walkDetector.getDiagnostics', walkDetector.getDiagnostics());
+              if (d) set('diagnostics', d);
+            }}
+          />
+          <Button
+            title="Stop detector"
+            onPress={async () => {
+              await run('walkDetector.stop', walkDetector.stop());
+              const d = await run('walkDetector.getDiagnostics', walkDetector.getDiagnostics());
+              if (d) set('diagnostics', d);
+            }}
+          />
+          <Text className="mt-2 text-xs text-neutral-500">
+            start() does not stop a running mechanism — tap Stop before switching, or the
+            keepalive keeps the app resident and contaminates the observer latency
+            measurement. The first observer start also raises the HealthKit read sheet.
+          </Text>
 
           <View className="h-4" />
           <Row label="Location (When In Use)" value={state.locationPermission.foreground} />

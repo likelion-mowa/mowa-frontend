@@ -18,6 +18,15 @@ export type WalkEvent = {
 };
 
 /**
+ * Mechanism selectable from JS when starting detection. Mirrors Swift
+ * `WalkDetectorCore.Mechanism` minus `none` (that value is the Core's internal
+ * "disabled" state, not something JS may request).
+ * ⚠️ The string values cross the bridge unchecked — tsc cannot catch drift
+ * against the Swift enum's raw values.
+ */
+export type WalkMechanism = 'core-location-keepalive' | 'healthkit-observer';
+
+/**
  * Values only the native side can know. Used to prove the JS <-> Swift bridge is
  * actually live — a JS mock cannot fake `isPedometerAvailable` on a real device.
  */

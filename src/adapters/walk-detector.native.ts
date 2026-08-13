@@ -11,9 +11,11 @@ import { toError, type WalkDetectorPort, type WalkEvent } from './types';
 export const walkDetector: WalkDetectorPort = {
   isAvailable: true,
 
-  async start() {
+  async start(mechanism) {
     try {
-      return { ok: true, value: await WalkDetector.start() };
+      // `?? null` keeps the Swift call at a fixed arity of one argument instead
+      // of leaning on optional-argument marshalling that no gate verifies.
+      return { ok: true, value: await WalkDetector.start(mechanism ?? null) };
     } catch (error) {
       return toError(error);
     }

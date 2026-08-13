@@ -30,18 +30,32 @@ public class WalkDetectorModule: Module {
       WalkDetectorCore.shared.onWalkDetected = nil
     }
 
-    AsyncFunction("start") { (promise: Promise) in
+    AsyncFunction("start") { (mechanism: String?, promise: Promise) in
       // CLLocationManager wants a run-loop thread and AsyncFunction bodies run
       // on a background queue, so hop to main before touching the Core.
       DispatchQueue.main.async {
-        // Inside enable(): startActivityUpdates IS the Motion & Fitness prompt
-        // (CoreMotion has no permission API), and requestAlwaysAuthorization
-        // raises the location prompt. Threshold/cooldown are the measured
-        // defaults from the prior investigation. deepLinkPath rides in the
-        // notification payload but stays unwired until deep links land; "/" is
-        // the only product route that exists.
+        // nil = core-location-keepalive, the only measured mechanism. An
+        // unknown string rejects loudly — silently falling back here would
+        // measure keepalive and label the result healthkit-observer.
+        let selected: WalkDetectorCore.Mechanism
+        if let raw = mechanism {
+          guard let parsed = WalkDetectorCore.Mechanism(rawValue: raw) else {
+            promise.reject("E_ENABLE", "unknown mechanism: \(raw)")
+            return
+          }
+          selected = parsed
+        } else {
+          selected = .coreLocationKeepAlive
+        }
+        // Inside enable(): for keepalive, startActivityUpdates IS the Motion &
+        // Fitness prompt (CoreMotion has no permission API) and
+        // requestAlwaysAuthorization raises the location prompt; the observer
+        // path raises the HealthKit read sheet instead. Threshold/cooldown are
+        // the measured defaults from the prior investigation. deepLinkPath
+        // rides in the notification payload but stays unwired until deep links
+        // land; "/" is the only product route that exists.
         WalkDetectorCore.shared.enable(
-          mechanism: .coreLocationKeepAlive,
+          mechanism: selected,
           thresholdSteps: 30,
           cooldownSeconds: 300,
           deepLinkPath: "/"

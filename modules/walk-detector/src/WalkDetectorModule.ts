@@ -4,11 +4,18 @@ import type {
   WalkDetectorDiagnostics,
   WalkDetectorModuleEvents,
   WalkEvent,
+  WalkMechanism,
 } from './WalkDetector.types';
 
 declare class WalkDetectorModule extends NativeModule<WalkDetectorModuleEvents> {
-  /** Begins detection. Also triggers the iOS "Motion & Fitness" permission prompt. */
-  start(): Promise<boolean>;
+  /**
+   * Begins detection with the given mechanism (`null` = the native default,
+   * core-location-keepalive) and triggers that mechanism's permission prompt:
+   * Motion & Fitness for keepalive, the HealthKit read sheet for the observer.
+   * Callers pass the argument explicitly (never omit it) so the Swift arity
+   * stays fixed — optional-argument marshalling is verified by no gate here.
+   */
+  start(mechanism: WalkMechanism | null): Promise<boolean>;
   stop(): Promise<boolean>;
   queryHistory(sinceMs: number): Promise<WalkEvent[]>;
   getDiagnostics(): Promise<WalkDetectorDiagnostics>;
