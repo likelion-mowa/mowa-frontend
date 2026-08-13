@@ -4,6 +4,7 @@ import type {
   WalkDetectorDiagnostics,
   WalkDetectorModuleEvents,
   WalkEvent,
+  WalkMechanism,
 } from './WalkDetector.types';
 
 /**
@@ -15,7 +16,7 @@ import type {
  * import cannot break the web bundle.
  */
 class WalkDetectorModule extends NativeModule<WalkDetectorModuleEvents> {
-  async start(): Promise<boolean> {
+  async start(_mechanism: WalkMechanism | null): Promise<boolean> {
     return false;
   }
 

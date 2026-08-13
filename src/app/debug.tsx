@@ -132,13 +132,45 @@ export default function SmokeScreen() {
         <Section title="1 · Permissions">
           <Row label="Motion & Fitness" value={state.diagnostics?.motionAuthorization ?? '—'} />
           <Button
-            title="Request Motion (via WalkDetector.start)"
+            title="Start (default: layered) — requests Motion"
             onPress={async () => {
               await run('walkDetector.start', walkDetector.start());
               const d = await run('walkDetector.getDiagnostics', walkDetector.getDiagnostics());
               if (d) set('diagnostics', d);
             }}
           />
+          <Button
+            title="Start (healthkit-observer) — unmeasured"
+            onPress={async () => {
+              await run(
+                "walkDetector.start('healthkit-observer')",
+                walkDetector.start('healthkit-observer'),
+              );
+              const d = await run('walkDetector.getDiagnostics', walkDetector.getDiagnostics());
+              if (d) set('diagnostics', d);
+            }}
+          />
+          <Button
+            title="Start (layered) — keepalive + observer net"
+            onPress={async () => {
+              await run("walkDetector.start('layered')", walkDetector.start('layered'));
+              const d = await run('walkDetector.getDiagnostics', walkDetector.getDiagnostics());
+              if (d) set('diagnostics', d);
+            }}
+          />
+          <Button
+            title="Stop detector"
+            onPress={async () => {
+              await run('walkDetector.stop', walkDetector.stop());
+              const d = await run('walkDetector.getDiagnostics', walkDetector.getDiagnostics());
+              if (d) set('diagnostics', d);
+            }}
+          />
+          <Text className="mt-2 text-xs text-neutral-500">
+            start() silences any previously running mechanism before starting the new one,
+            so switching needs no separate Stop. The first observer/layered start raises
+            the HealthKit read sheet.
+          </Text>
 
           <View className="h-4" />
           <Row label="Location (When In Use)" value={state.locationPermission.foreground} />

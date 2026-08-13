@@ -36,13 +36,20 @@ export type AdapterResult<T> =
 import type {
   WalkEvent,
   WalkDetectorDiagnostics,
+  WalkMechanism,
 } from '../../modules/walk-detector/src/WalkDetector.types';
 
-export type { WalkEvent, WalkDetectorDiagnostics };
+export type { WalkEvent, WalkDetectorDiagnostics, WalkMechanism };
 
 export interface WalkDetectorPort {
   readonly isAvailable: boolean;
-  start(): Promise<AdapterResult<boolean>>;
+  /**
+   * Omitting `mechanism` starts the native default: 'layered', keepalive +
+   * observer safety net (verified 2026-08-13 — one notification per walk;
+   * observer lags walk-end by ~7–18 min, so it backstops rather than
+   * replaces). Single mechanisms exist for /debug measurement.
+   */
+  start(mechanism?: WalkMechanism): Promise<AdapterResult<boolean>>;
   stop(): Promise<AdapterResult<boolean>>;
   queryHistory(sinceMs: number): Promise<AdapterResult<WalkEvent[]>>;
   getDiagnostics(): Promise<AdapterResult<WalkDetectorDiagnostics>>;
