@@ -44,10 +44,10 @@ export type { WalkEvent, WalkDetectorDiagnostics, WalkMechanism };
 export interface WalkDetectorPort {
   readonly isAvailable: boolean;
   /**
-   * Omitting `mechanism` starts the native default, core-location-keepalive.
-   * 'healthkit-observer' alone exists for /debug measurement; 'layered' runs
-   * keepalive + observer safety net (delivery measured 2026-08-13: observer
-   * lags walk-end by ~7–18 min, so it backstops rather than replaces).
+   * Omitting `mechanism` starts the native default: 'layered', keepalive +
+   * observer safety net (verified 2026-08-13 — one notification per walk;
+   * observer lags walk-end by ~7–18 min, so it backstops rather than
+   * replaces). Single mechanisms exist for /debug measurement.
    */
   start(mechanism?: WalkMechanism): Promise<AdapterResult<boolean>>;
   stop(): Promise<AdapterResult<boolean>>;

@@ -34,9 +34,11 @@ public class WalkDetectorModule: Module {
       // CLLocationManager wants a run-loop thread and AsyncFunction bodies run
       // on a background queue, so hop to main before touching the Core.
       DispatchQueue.main.async {
-        // nil = core-location-keepalive, the only measured mechanism. An
-        // unknown string rejects loudly — silently falling back here would
-        // measure keepalive and label the result healthkit-observer.
+        // nil = layered (keepalive live detector + observer safety net), the
+        // verified product configuration since 2026-08-13. Explicit single
+        // mechanisms remain for /debug measurement. An unknown string rejects
+        // loudly — silently falling back would run a mechanism the caller
+        // didn't ask for and mislabel any measurement.
         let selected: WalkDetectorCore.Mechanism
         if let raw = mechanism {
           guard let parsed = WalkDetectorCore.Mechanism(rawValue: raw) else {
@@ -45,7 +47,7 @@ public class WalkDetectorModule: Module {
           }
           selected = parsed
         } else {
-          selected = .coreLocationKeepAlive
+          selected = .layered
         }
         // Inside enable(): for keepalive, startActivityUpdates IS the Motion &
         // Fitness prompt (CoreMotion has no permission API) and

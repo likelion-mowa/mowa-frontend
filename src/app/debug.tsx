@@ -132,7 +132,7 @@ export default function SmokeScreen() {
         <Section title="1 · Permissions">
           <Row label="Motion & Fitness" value={state.diagnostics?.motionAuthorization ?? '—'} />
           <Button
-            title="Request Motion (via WalkDetector.start)"
+            title="Start (default: layered) — requests Motion"
             onPress={async () => {
               await run('walkDetector.start', walkDetector.start());
               const d = await run('walkDetector.getDiagnostics', walkDetector.getDiagnostics());
