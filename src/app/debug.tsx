@@ -300,6 +300,16 @@ export default function SmokeScreen() {
             label="locationAuthorization"
             value={state.diagnostics?.locationAuthorization ?? '—'}
           />
+          {/*
+            Read back from the Core's own UserDefaults, so this is the only
+            place that proves 설정 > 기록 제안 알림 actually crossed the bridge.
+            The settings toggle's position comes from the JS-side KV copy and
+            would look right even if the Swift write never landed.
+          */}
+          <Row
+            label="notificationsEnabled (native)"
+            value={state.diagnostics ? String(state.diagnostics.notificationsEnabled) : '—'}
+          />
           <Row
             label="warnings"
             value={state.diagnostics ? String(state.diagnostics.warnings.length) : '—'}
