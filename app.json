@@ -50,6 +50,13 @@
       ],
       "expo-notifications",
       [
+        "expo-image-picker",
+        {
+          "photosPermission": "Mowa lets you attach a photo from your library to a walk diary entry.",
+          "cameraPermission": "Mowa lets you take a photo to attach to a walk diary entry."
+        }
+      ],
+      [
         "@kingstinct/react-native-healthkit",
         {
           "background": true,
