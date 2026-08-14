@@ -48,6 +48,10 @@ const MUST_BE_PRESENT = [
   ['diary generating headline', '산책 기억을 만들고 있어요'],
   ['diary failure headline', '산책 기억을 만들지 못했어요'],
   ['diary preview header', '산책 기억 미리보기'],
+  ['home subtitle', '당신의 산책을 모와드릴까요?'],
+  ['archive subtitle', '산책 기억 모음'],
+  ['archive empty state', '산책 기록이 없어요'],
+  ['settings placeholder', '설정 화면을 준비 중이에요'],
 ];
 
 let bundles;
