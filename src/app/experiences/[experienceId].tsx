@@ -14,6 +14,7 @@ import { IcChevronLeft, IcClock, IcImage, IcLocation } from '@/components/icons'
 import { ScreenHeader } from '@/components/screen-header';
 import { formatDurationMinutes, formatKoreanDate, formatTime } from '@/lib/format';
 import { colors } from '@/lib/theme';
+import { useAuth } from '@/stores/auth-store';
 import { useExperiences } from '@/stores/experience-store';
 
 /**
@@ -49,12 +50,16 @@ export default function ExperienceDetailScreen() {
   const loadedId = useExperiences((state) => state.experienceId);
   const detail = useExperiences((state) => state.detail);
   const loadExperience = useExperiences((state) => state.loadExperience);
+  const signedIn = useAuth((state) => state.status === 'signed-in');
 
+  // Gated on the session for the same reason as the list screens: a reload of
+  // this URL mounts before the token has been restored.
   useEffect(() => {
+    if (!signedIn) return;
     if (typeof experienceId === 'string' && experienceId.length > 0) {
       void loadExperience(experienceId);
     }
-  }, [experienceId, loadExperience]);
+  }, [signedIn, experienceId, loadExperience]);
 
   const goBack = () => router.replace(from === 'archive' ? '/archive' : '/');
 

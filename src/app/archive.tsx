@@ -455,13 +455,17 @@ export default function ArchiveScreen() {
   // needs no fetch of its own. It stays null when /users/me was unreachable —
   // the title falls back to neutral copy rather than showing an error.
   const nickname = useAuth((state) => state.user?.nickname ?? null);
+  const signedIn = useAuth((state) => state.status === 'signed-in');
 
   const [mode, setMode] = useState<ViewMode>('grid');
   const [period, setPeriod] = useState<PeriodFilter>('all');
 
+  // Gated on the session: a reload mounts this screen while the token is still
+  // being restored, and an ungated fetch would fire without one.
   useEffect(() => {
+    if (!signedIn) return;
     void loadList();
-  }, [loadList]);
+  }, [signedIn, loadList]);
 
   const today = useMemo(() => kstNow(Date.now()), []);
   const filtered = useMemo(

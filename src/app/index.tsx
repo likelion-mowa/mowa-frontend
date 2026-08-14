@@ -22,6 +22,7 @@ import { usePressScale, useAnimatedToggle } from '@/lib/animations';
 import { formatDurationMinutes, formatTime, relativeLabel } from '@/lib/format';
 import { kstPartsFromIso } from '@/lib/kst';
 import { colors, shadows } from '@/lib/theme';
+import { useAuth } from '@/stores/auth-store';
 import { useDiaryFlow } from '@/stores/diary-flow-store';
 import { useExperiences } from '@/stores/experience-store';
 import { useWalkCandidateFlow } from '@/stores/walk-candidate-store';
@@ -294,12 +295,20 @@ function HomeGlassBar() {
 
 export default function HomeScreen() {
   const loadList = useExperiences((state) => state.loadList);
+  const signedIn = useAuth((state) => state.status === 'signed-in');
 
   // Refetched on every mount: the payload is small and the archive or a saved
   // diary can change it while this screen is out of view.
+  //
+  // Gated on the session, not just mount. On a reload this screen mounts while
+  // the token is still being restored, and an ungated fetch would fire without
+  // one and land on the error card. Keying the effect on `signedIn` also makes
+  // it refetch after an account switch instead of showing the previous user's
+  // rows.
   useEffect(() => {
+    if (!signedIn) return;
     void loadList();
-  }, [loadList]);
+  }, [signedIn, loadList]);
 
   return (
     <SafeAreaView edges={['top']} className="flex-1 bg-white">
