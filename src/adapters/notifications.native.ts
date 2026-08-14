@@ -82,7 +82,13 @@ export const notifications: NotificationsPort = {
       // The synchronous getter; `getLastNotificationResponseAsync` is
       // deprecated in expo-notifications 57.
       const response = Notifications.getLastNotificationResponse();
-      return { ok: true, value: response ? toTapData(response) : null };
+      if (response === null) return { ok: true, value: null };
+      // Consume it. iOS keeps the last response across launches, so without
+      // this every cold start would route to the walk screen again on a tap
+      // the user already handled — measured on device 2026-08-14, where the
+      // app re-entered /walk with no new notification in Notification Center.
+      Notifications.clearLastNotificationResponse();
+      return { ok: true, value: toTapData(response) };
     } catch (error) {
       return toError(error);
     }

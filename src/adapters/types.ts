@@ -100,6 +100,10 @@ export interface NotificationsPort {
   /**
    * The tap that launched the app, if any. A response listener alone MISSES
    * cold-start taps (measured in the prior repo), so this must run at mount.
+   *
+   * Consuming: iOS remembers the last response indefinitely, so this clears it
+   * after reading. Otherwise every later launch replays a tap the user already
+   * acted on and the app jumps to the walk screen unbidden.
    */
   getInitialResponse(): Promise<AdapterResult<NotificationTapData | null>>;
   /** Taps received while the app is already running. Returns the unsubscribe. */

@@ -55,6 +55,13 @@ async function requestJson<T>(
   try {
     response = await fetch(`${BASE_URL}${path}`, {
       method,
+      // The candidate GET reads a status machine, so a stale cache hit would
+      // show the wrong screen. Honest scope: this holds on web, and React
+      // Native appears to ignore it — the device still issued conditional GETs
+      // on 2026-08-14. That turned out to be harmless: iOS revalidates and
+      // hands the app the fresh body, and the transitions that followed a 304
+      // went through.
+      cache: 'no-store',
       headers: {
         ...(body === undefined ? {} : { 'content-type': 'application/json' }),
         ...(accessToken === null ? {} : { authorization: `Bearer ${accessToken}` }),
