@@ -17,7 +17,6 @@
       "updatedAt": "2026-08-01T09:00:00+09:00"
     }
   ],
-
   "walkCandidates": [
     {
       "id": "aaaaaaa1-0000-4000-8000-000000000001",
@@ -62,9 +61,107 @@
       "status": "RECORDING",
       "createdAt": "2026-08-11T10:00:00+09:00",
       "updatedAt": "2026-08-11T10:20:00+09:00"
+    },
+    {
+      "id": "aaaaaaa9-0000-4000-8000-000000000010",
+      "userId": "11111111-1111-4111-8111-111111111111",
+      "detectedStartAt": "2026-08-07T07:23:00+09:00",
+      "detectedEndAt": "2026-08-07T08:01:00+09:00",
+      "durationSeconds": 2280,
+      "locationSummary": "여의도 한강공원",
+      "status": "RECORDING",
+      "createdAt": "2026-08-07T07:23:00+09:00",
+      "updatedAt": "2026-08-07T08:01:00+09:00"
+    },
+    {
+      "id": "aaaaaaa9-0000-4000-8000-000000000011",
+      "userId": "11111111-1111-4111-8111-111111111111",
+      "detectedStartAt": "2026-08-07T20:05:00+09:00",
+      "detectedEndAt": "2026-08-07T20:27:00+09:00",
+      "durationSeconds": 1320,
+      "locationSummary": "여의도 샛강",
+      "status": "RECORDING",
+      "createdAt": "2026-08-07T20:05:00+09:00",
+      "updatedAt": "2026-08-07T20:27:00+09:00"
+    },
+    {
+      "id": "aaaaaaa9-0000-4000-8000-000000000012",
+      "userId": "11111111-1111-4111-8111-111111111111",
+      "detectedStartAt": "2026-08-05T18:45:00+09:00",
+      "detectedEndAt": "2026-08-05T19:37:00+09:00",
+      "durationSeconds": 3120,
+      "locationSummary": "경복궁 서쪽 돌담길",
+      "status": "RECORDING",
+      "createdAt": "2026-08-05T18:45:00+09:00",
+      "updatedAt": "2026-08-05T19:37:00+09:00"
+    },
+    {
+      "id": "aaaaaaa9-0000-4000-8000-000000000013",
+      "userId": "11111111-1111-4111-8111-111111111111",
+      "detectedStartAt": "2026-08-02T14:10:00+09:00",
+      "detectedEndAt": "2026-08-02T14:38:00+09:00",
+      "durationSeconds": 1680,
+      "locationSummary": "홍대 골목",
+      "status": "RECORDING",
+      "createdAt": "2026-08-02T14:10:00+09:00",
+      "updatedAt": "2026-08-02T14:38:00+09:00"
+    },
+    {
+      "id": "aaaaaaa9-0000-4000-8000-000000000014",
+      "userId": "11111111-1111-4111-8111-111111111111",
+      "detectedStartAt": "2026-07-28T17:10:00+09:00",
+      "detectedEndAt": "2026-07-28T17:55:00+09:00",
+      "durationSeconds": 2700,
+      "locationSummary": "마포구 연남동",
+      "status": "RECORDING",
+      "createdAt": "2026-07-28T17:10:00+09:00",
+      "updatedAt": "2026-07-28T17:55:00+09:00"
+    },
+    {
+      "id": "aaaaaaa9-0000-4000-8000-000000000015",
+      "userId": "11111111-1111-4111-8111-111111111111",
+      "detectedStartAt": "2026-07-20T08:30:00+09:00",
+      "detectedEndAt": "2026-07-20T09:42:00+09:00",
+      "durationSeconds": 4320,
+      "locationSummary": "북한산 둘레길",
+      "status": "RECORDING",
+      "createdAt": "2026-07-20T08:30:00+09:00",
+      "updatedAt": "2026-07-20T09:42:00+09:00"
+    },
+    {
+      "id": "aaaaaaa9-0000-4000-8000-000000000016",
+      "userId": "11111111-1111-4111-8111-111111111111",
+      "detectedStartAt": "2026-07-15T19:00:00+09:00",
+      "detectedEndAt": "2026-07-15T19:33:00+09:00",
+      "durationSeconds": 1980,
+      "locationSummary": "서울숲",
+      "status": "RECORDING",
+      "createdAt": "2026-07-15T19:00:00+09:00",
+      "updatedAt": "2026-07-15T19:33:00+09:00"
+    },
+    {
+      "id": "aaaaaaa9-0000-4000-8000-000000000017",
+      "userId": "11111111-1111-4111-8111-111111111111",
+      "detectedStartAt": "2026-07-08T15:00:00+09:00",
+      "detectedEndAt": "2026-07-08T15:41:00+09:00",
+      "durationSeconds": 2460,
+      "locationSummary": "인사동 거리",
+      "status": "RECORDING",
+      "createdAt": "2026-07-08T15:00:00+09:00",
+      "updatedAt": "2026-07-08T15:41:00+09:00"
+    },
+    {
+      "id": "aaaaaaa9-0000-4000-8000-000000000018",
+      "userId": "11111111-1111-4111-8111-111111111111",
+      "detectedStartAt": "2026-07-02T06:50:00+09:00",
+      "detectedEndAt": "2026-07-02T07:15:00+09:00",
+      "durationSeconds": 1500,
+      "locationSummary": "광화문 광장",
+      "status": "RECORDING",
+      "createdAt": "2026-07-02T06:50:00+09:00",
+      "updatedAt": "2026-07-02T07:15:00+09:00"
     }
   ],
-
   "experienceDrafts": [
     {
       "id": "bbbbbbb1-0000-4000-8000-000000000001",
@@ -91,15 +188,175 @@
       "aiGenerationStatus": "PENDING",
       "createdAt": "2026-08-12T08:45:00+09:00",
       "updatedAt": "2026-08-12T08:45:00+09:00"
+    },
+    {
+      "id": "bbbbbbb9-0000-4000-8000-000000000010",
+      "userId": "11111111-1111-4111-8111-111111111111",
+      "candidateId": "aaaaaaa9-0000-4000-8000-000000000010",
+      "photoUrl": "https://images.unsplash.com/photo-1594269488498-af3a2a2db95a?w=600&h=600&fit=crop&auto=format",
+      "companion": "ALONE",
+      "situation": "MORNING",
+      "aiTitle": "이른 아침의 한강변",
+      "aiBody": "해가 뜨기 전 강변으로 나섰다. 아직 사람이 거의 없는 고요한 시간, 강물 위에 번지는 새벽빛이 마음을 차분하게 가라앉혀 줬다. 발걸음이 자연스럽게 느려지면서 잠시 아무것도 생각하지 않아도 되는 순간이었다.",
+      "aiGenerationStatus": "SUCCESS",
+      "createdAt": "2026-08-07T08:01:00+09:00",
+      "updatedAt": "2026-08-07T08:09:00+09:00"
+    },
+    {
+      "id": "bbbbbbb9-0000-4000-8000-000000000011",
+      "userId": "11111111-1111-4111-8111-111111111111",
+      "candidateId": "aaaaaaa9-0000-4000-8000-000000000011",
+      "photoUrl": null,
+      "companion": "ALONE",
+      "situation": "EVENING",
+      "aiTitle": "같은 날 저녁, 다시 강변",
+      "aiBody": "아침에 걸었던 길을 저녁에 다시 걸었다. 같은 자리인데 물빛이 완전히 달랐다.",
+      "aiGenerationStatus": "SUCCESS",
+      "createdAt": "2026-08-07T20:27:00+09:00",
+      "updatedAt": "2026-08-07T20:35:00+09:00"
+    },
+    {
+      "id": "bbbbbbb9-0000-4000-8000-000000000012",
+      "userId": "11111111-1111-4111-8111-111111111111",
+      "candidateId": "aaaaaaa9-0000-4000-8000-000000000012",
+      "photoUrl": "https://images.unsplash.com/photo-1762346067878-e1c2262e389f?w=600&h=600&fit=crop&auto=format",
+      "companion": "PET",
+      "situation": "EVENING",
+      "aiTitle": "루나와 함께한 황혼 산책",
+      "aiBody": "루나가 좋아하는 돌담길을 천천히 걸었다. 퇴근길 사람들 사이로 산책하는 동안 루나는 쉬지 않고 코를 킁킁거렸다. 저녁 햇살이 담장 위로 기울어지는 시간, 오늘 하루가 제법 괜찮았다는 생각이 들었다.",
+      "aiGenerationStatus": "SUCCESS",
+      "createdAt": "2026-08-05T19:37:00+09:00",
+      "updatedAt": "2026-08-05T19:45:00+09:00"
+    },
+    {
+      "id": "bbbbbbb9-0000-4000-8000-000000000013",
+      "userId": "11111111-1111-4111-8111-111111111111",
+      "candidateId": "aaaaaaa9-0000-4000-8000-000000000013",
+      "photoUrl": null,
+      "companion": "WITH_SOMEONE",
+      "situation": "IN_TRANSIT",
+      "aiTitle": "우연히 발견한 골목길",
+      "aiBody": "약속 장소로 가는 길에 낯선 골목으로 들어섰다. 오래된 담벼락과 작은 화분들, 그 사이로 고양이 한 마리가 누워 있었다. 약속 시간보다 조금 늦어졌지만 괜찮았다.",
+      "aiGenerationStatus": "SUCCESS",
+      "createdAt": "2026-08-02T14:38:00+09:00",
+      "updatedAt": "2026-08-02T14:46:00+09:00"
+    },
+    {
+      "id": "bbbbbbb9-0000-4000-8000-000000000014",
+      "userId": "11111111-1111-4111-8111-111111111111",
+      "candidateId": "aaaaaaa9-0000-4000-8000-000000000014",
+      "photoUrl": "https://images.unsplash.com/photo-1763561028942-56670d9de59b?w=600&h=600&fit=crop&auto=format",
+      "companion": "ALONE",
+      "situation": "EVENING",
+      "aiTitle": "연남동 골목의 조각들",
+      "aiBody": "익숙한 것들 사이에서 낯선 것을 발견하는 기분. 오래된 가게 창문에 비친 하늘이 예뻤다.",
+      "aiGenerationStatus": "SUCCESS",
+      "createdAt": "2026-07-28T17:55:00+09:00",
+      "updatedAt": "2026-07-28T18:03:00+09:00"
+    },
+    {
+      "id": "bbbbbbb9-0000-4000-8000-000000000015",
+      "userId": "11111111-1111-4111-8111-111111111111",
+      "candidateId": "aaaaaaa9-0000-4000-8000-000000000015",
+      "photoUrl": "https://images.unsplash.com/photo-1659150566621-2ee3678865c0?w=600&h=600&fit=crop&auto=format",
+      "companion": "WITH_SOMEONE",
+      "situation": "MORNING",
+      "aiTitle": "산속 이른 아침",
+      "aiBody": "새소리와 발소리만 들리는 길. 땀이 흘렀지만 그것조차 상쾌하게 느껴졌다.",
+      "aiGenerationStatus": "SUCCESS",
+      "createdAt": "2026-07-20T09:42:00+09:00",
+      "updatedAt": "2026-07-20T09:50:00+09:00"
+    },
+    {
+      "id": "bbbbbbb9-0000-4000-8000-000000000016",
+      "userId": "11111111-1111-4111-8111-111111111111",
+      "candidateId": "aaaaaaa9-0000-4000-8000-000000000016",
+      "photoUrl": "https://images.unsplash.com/photo-1776928161685-c986cb1cb550?w=600&h=600&fit=crop&auto=format",
+      "companion": "PET",
+      "situation": "EVENING",
+      "aiTitle": "초여름 저녁의 서울숲",
+      "aiBody": "풀냄새가 진하게 났다. 루나는 새 한 마리를 쫓다가 넘어졌다.",
+      "aiGenerationStatus": "SUCCESS",
+      "createdAt": "2026-07-15T19:33:00+09:00",
+      "updatedAt": "2026-07-15T19:41:00+09:00"
+    },
+    {
+      "id": "bbbbbbb9-0000-4000-8000-000000000017",
+      "userId": "11111111-1111-4111-8111-111111111111",
+      "candidateId": "aaaaaaa9-0000-4000-8000-000000000017",
+      "photoUrl": null,
+      "companion": "WITH_SOMEONE",
+      "situation": "EXPLORING",
+      "aiTitle": "오래된 거리를 걷다",
+      "aiBody": "갤러리 골목을 천천히 구경했다. 작은 공방에서 도자기 빚는 냄새가 났다.",
+      "aiGenerationStatus": "SUCCESS",
+      "createdAt": "2026-07-08T15:41:00+09:00",
+      "updatedAt": "2026-07-08T15:49:00+09:00"
+    },
+    {
+      "id": "bbbbbbb9-0000-4000-8000-000000000018",
+      "userId": "11111111-1111-4111-8111-111111111111",
+      "candidateId": "aaaaaaa9-0000-4000-8000-000000000018",
+      "photoUrl": "https://images.unsplash.com/photo-1635689419174-6a74f8e8f78c?w=600&h=600&fit=crop&auto=format",
+      "companion": "ALONE",
+      "situation": "MORNING",
+      "aiTitle": "텅 빈 광화문의 새벽",
+      "aiBody": "아무도 없는 넓은 광장. 분수 소리만 들렸다.",
+      "aiGenerationStatus": "SUCCESS",
+      "createdAt": "2026-07-02T07:15:00+09:00",
+      "updatedAt": "2026-07-02T07:23:00+09:00"
     }
   ],
-
   "experienceDraftEmotions": [
-    { "draftId": "bbbbbbb1-0000-4000-8000-000000000001", "emotion": "CALM" },
-    { "draftId": "bbbbbbb1-0000-4000-8000-000000000001", "emotion": "PENSIVE" },
-    { "draftId": "bbbbbbb1-0000-4000-8000-000000000002", "emotion": "REFRESHED" }
+    {
+      "draftId": "bbbbbbb1-0000-4000-8000-000000000001",
+      "emotion": "CALM"
+    },
+    {
+      "draftId": "bbbbbbb1-0000-4000-8000-000000000001",
+      "emotion": "PENSIVE"
+    },
+    {
+      "draftId": "bbbbbbb1-0000-4000-8000-000000000002",
+      "emotion": "REFRESHED"
+    },
+    {
+      "draftId": "bbbbbbb9-0000-4000-8000-000000000010",
+      "emotion": "REFRESHED"
+    },
+    {
+      "draftId": "bbbbbbb9-0000-4000-8000-000000000011",
+      "emotion": "CALM"
+    },
+    {
+      "draftId": "bbbbbbb9-0000-4000-8000-000000000012",
+      "emotion": "HAPPY"
+    },
+    {
+      "draftId": "bbbbbbb9-0000-4000-8000-000000000013",
+      "emotion": "CALM"
+    },
+    {
+      "draftId": "bbbbbbb9-0000-4000-8000-000000000014",
+      "emotion": "PENSIVE"
+    },
+    {
+      "draftId": "bbbbbbb9-0000-4000-8000-000000000015",
+      "emotion": "REFRESHED"
+    },
+    {
+      "draftId": "bbbbbbb9-0000-4000-8000-000000000016",
+      "emotion": "CALM"
+    },
+    {
+      "draftId": "bbbbbbb9-0000-4000-8000-000000000017",
+      "emotion": "HAPPY"
+    },
+    {
+      "draftId": "bbbbbbb9-0000-4000-8000-000000000018",
+      "emotion": "CALM"
+    }
   ],
-
   "walkExperiences": [
     {
       "id": "ccccccc1-0000-4000-8000-000000000001",
@@ -117,17 +374,339 @@
       "createdAt": "2026-08-11T14:46:00+09:00",
       "updatedAt": "2026-08-11T14:46:00+09:00",
       "deletedAt": null
+    },
+    {
+      "id": "ccccccc9-0000-4000-8000-000000000010",
+      "userId": "11111111-1111-4111-8111-111111111111",
+      "draftId": "bbbbbbb9-0000-4000-8000-000000000010",
+      "title": "이른 아침의 한강변",
+      "body": "해가 뜨기 전 강변으로 나섰다. 아직 사람이 거의 없는 고요한 시간, 강물 위에 번지는 새벽빛이 마음을 차분하게 가라앉혀 줬다. 발걸음이 자연스럽게 느려지면서 잠시 아무것도 생각하지 않아도 되는 순간이었다.",
+      "photoUrl": "https://images.unsplash.com/photo-1594269488498-af3a2a2db95a?w=600&h=600&fit=crop&auto=format",
+      "startedAt": "2026-08-07T07:23:00+09:00",
+      "endedAt": "2026-08-07T08:01:00+09:00",
+      "durationSeconds": 2280,
+      "locationSummary": "여의도 한강공원",
+      "companion": "ALONE",
+      "situation": "MORNING",
+      "createdAt": "2026-08-07T08:09:00+09:00",
+      "updatedAt": "2026-08-07T08:09:00+09:00",
+      "deletedAt": null
+    },
+    {
+      "id": "ccccccc9-0000-4000-8000-000000000011",
+      "userId": "11111111-1111-4111-8111-111111111111",
+      "draftId": "bbbbbbb9-0000-4000-8000-000000000011",
+      "title": "같은 날 저녁, 다시 강변",
+      "body": "아침에 걸었던 길을 저녁에 다시 걸었다. 같은 자리인데 물빛이 완전히 달랐다.",
+      "photoUrl": null,
+      "startedAt": "2026-08-07T20:05:00+09:00",
+      "endedAt": "2026-08-07T20:27:00+09:00",
+      "durationSeconds": 1320,
+      "locationSummary": "여의도 샛강",
+      "companion": "ALONE",
+      "situation": "EVENING",
+      "createdAt": "2026-08-07T20:35:00+09:00",
+      "updatedAt": "2026-08-07T20:35:00+09:00",
+      "deletedAt": null
+    },
+    {
+      "id": "ccccccc9-0000-4000-8000-000000000012",
+      "userId": "11111111-1111-4111-8111-111111111111",
+      "draftId": "bbbbbbb9-0000-4000-8000-000000000012",
+      "title": "루나와 함께한 황혼 산책",
+      "body": "루나가 좋아하는 돌담길을 천천히 걸었다. 퇴근길 사람들 사이로 산책하는 동안 루나는 쉬지 않고 코를 킁킁거렸다. 저녁 햇살이 담장 위로 기울어지는 시간, 오늘 하루가 제법 괜찮았다는 생각이 들었다.",
+      "photoUrl": "https://images.unsplash.com/photo-1762346067878-e1c2262e389f?w=600&h=600&fit=crop&auto=format",
+      "startedAt": "2026-08-05T18:45:00+09:00",
+      "endedAt": "2026-08-05T19:37:00+09:00",
+      "durationSeconds": 3120,
+      "locationSummary": "경복궁 서쪽 돌담길",
+      "companion": "PET",
+      "situation": "EVENING",
+      "createdAt": "2026-08-05T19:45:00+09:00",
+      "updatedAt": "2026-08-05T19:45:00+09:00",
+      "deletedAt": null
+    },
+    {
+      "id": "ccccccc9-0000-4000-8000-000000000013",
+      "userId": "11111111-1111-4111-8111-111111111111",
+      "draftId": "bbbbbbb9-0000-4000-8000-000000000013",
+      "title": "우연히 발견한 골목길",
+      "body": "약속 장소로 가는 길에 낯선 골목으로 들어섰다. 오래된 담벼락과 작은 화분들, 그 사이로 고양이 한 마리가 누워 있었다. 약속 시간보다 조금 늦어졌지만 괜찮았다.",
+      "photoUrl": null,
+      "startedAt": "2026-08-02T14:10:00+09:00",
+      "endedAt": "2026-08-02T14:38:00+09:00",
+      "durationSeconds": 1680,
+      "locationSummary": "홍대 골목",
+      "companion": "WITH_SOMEONE",
+      "situation": "IN_TRANSIT",
+      "createdAt": "2026-08-02T14:46:00+09:00",
+      "updatedAt": "2026-08-02T14:46:00+09:00",
+      "deletedAt": null
+    },
+    {
+      "id": "ccccccc9-0000-4000-8000-000000000014",
+      "userId": "11111111-1111-4111-8111-111111111111",
+      "draftId": "bbbbbbb9-0000-4000-8000-000000000014",
+      "title": "연남동 골목의 조각들",
+      "body": "익숙한 것들 사이에서 낯선 것을 발견하는 기분. 오래된 가게 창문에 비친 하늘이 예뻤다.",
+      "photoUrl": "https://images.unsplash.com/photo-1763561028942-56670d9de59b?w=600&h=600&fit=crop&auto=format",
+      "startedAt": "2026-07-28T17:10:00+09:00",
+      "endedAt": "2026-07-28T17:55:00+09:00",
+      "durationSeconds": 2700,
+      "locationSummary": "마포구 연남동",
+      "companion": "ALONE",
+      "situation": "EVENING",
+      "createdAt": "2026-07-28T18:03:00+09:00",
+      "updatedAt": "2026-07-28T18:03:00+09:00",
+      "deletedAt": null
+    },
+    {
+      "id": "ccccccc9-0000-4000-8000-000000000015",
+      "userId": "11111111-1111-4111-8111-111111111111",
+      "draftId": "bbbbbbb9-0000-4000-8000-000000000015",
+      "title": "산속 이른 아침",
+      "body": "새소리와 발소리만 들리는 길. 땀이 흘렀지만 그것조차 상쾌하게 느껴졌다.",
+      "photoUrl": "https://images.unsplash.com/photo-1659150566621-2ee3678865c0?w=600&h=600&fit=crop&auto=format",
+      "startedAt": "2026-07-20T08:30:00+09:00",
+      "endedAt": "2026-07-20T09:42:00+09:00",
+      "durationSeconds": 4320,
+      "locationSummary": "북한산 둘레길",
+      "companion": "WITH_SOMEONE",
+      "situation": "MORNING",
+      "createdAt": "2026-07-20T09:50:00+09:00",
+      "updatedAt": "2026-07-20T09:50:00+09:00",
+      "deletedAt": null
+    },
+    {
+      "id": "ccccccc9-0000-4000-8000-000000000016",
+      "userId": "11111111-1111-4111-8111-111111111111",
+      "draftId": "bbbbbbb9-0000-4000-8000-000000000016",
+      "title": "초여름 저녁의 서울숲",
+      "body": "풀냄새가 진하게 났다. 루나는 새 한 마리를 쫓다가 넘어졌다.",
+      "photoUrl": "https://images.unsplash.com/photo-1776928161685-c986cb1cb550?w=600&h=600&fit=crop&auto=format",
+      "startedAt": "2026-07-15T19:00:00+09:00",
+      "endedAt": "2026-07-15T19:33:00+09:00",
+      "durationSeconds": 1980,
+      "locationSummary": "서울숲",
+      "companion": "PET",
+      "situation": "EVENING",
+      "createdAt": "2026-07-15T19:41:00+09:00",
+      "updatedAt": "2026-07-15T19:41:00+09:00",
+      "deletedAt": null
+    },
+    {
+      "id": "ccccccc9-0000-4000-8000-000000000017",
+      "userId": "11111111-1111-4111-8111-111111111111",
+      "draftId": "bbbbbbb9-0000-4000-8000-000000000017",
+      "title": "오래된 거리를 걷다",
+      "body": "갤러리 골목을 천천히 구경했다. 작은 공방에서 도자기 빚는 냄새가 났다.",
+      "photoUrl": null,
+      "startedAt": "2026-07-08T15:00:00+09:00",
+      "endedAt": "2026-07-08T15:41:00+09:00",
+      "durationSeconds": 2460,
+      "locationSummary": "인사동 거리",
+      "companion": "WITH_SOMEONE",
+      "situation": "EXPLORING",
+      "createdAt": "2026-07-08T15:49:00+09:00",
+      "updatedAt": "2026-07-08T15:49:00+09:00",
+      "deletedAt": null
+    },
+    {
+      "id": "ccccccc9-0000-4000-8000-000000000018",
+      "userId": "11111111-1111-4111-8111-111111111111",
+      "draftId": "bbbbbbb9-0000-4000-8000-000000000018",
+      "title": "텅 빈 광화문의 새벽",
+      "body": "아무도 없는 넓은 광장. 분수 소리만 들렸다.",
+      "photoUrl": "https://images.unsplash.com/photo-1635689419174-6a74f8e8f78c?w=600&h=600&fit=crop&auto=format",
+      "startedAt": "2026-07-02T06:50:00+09:00",
+      "endedAt": "2026-07-02T07:15:00+09:00",
+      "durationSeconds": 1500,
+      "locationSummary": "광화문 광장",
+      "companion": "ALONE",
+      "situation": "MORNING",
+      "createdAt": "2026-07-02T07:23:00+09:00",
+      "updatedAt": "2026-07-02T07:23:00+09:00",
+      "deletedAt": null
     }
   ],
-
   "walkExperienceEmotions": [
-    { "experienceId": "ccccccc1-0000-4000-8000-000000000001", "emotion": "CALM" },
-    { "experienceId": "ccccccc1-0000-4000-8000-000000000001", "emotion": "PENSIVE" }
+    {
+      "experienceId": "ccccccc1-0000-4000-8000-000000000001",
+      "emotion": "CALM"
+    },
+    {
+      "experienceId": "ccccccc1-0000-4000-8000-000000000001",
+      "emotion": "PENSIVE"
+    },
+    {
+      "experienceId": "ccccccc9-0000-4000-8000-000000000010",
+      "emotion": "REFRESHED"
+    },
+    {
+      "experienceId": "ccccccc9-0000-4000-8000-000000000011",
+      "emotion": "CALM"
+    },
+    {
+      "experienceId": "ccccccc9-0000-4000-8000-000000000012",
+      "emotion": "HAPPY"
+    },
+    {
+      "experienceId": "ccccccc9-0000-4000-8000-000000000013",
+      "emotion": "CALM"
+    },
+    {
+      "experienceId": "ccccccc9-0000-4000-8000-000000000014",
+      "emotion": "PENSIVE"
+    },
+    {
+      "experienceId": "ccccccc9-0000-4000-8000-000000000015",
+      "emotion": "REFRESHED"
+    },
+    {
+      "experienceId": "ccccccc9-0000-4000-8000-000000000016",
+      "emotion": "CALM"
+    },
+    {
+      "experienceId": "ccccccc9-0000-4000-8000-000000000017",
+      "emotion": "HAPPY"
+    },
+    {
+      "experienceId": "ccccccc9-0000-4000-8000-000000000018",
+      "emotion": "CALM"
+    }
   ],
-
   "walkExperienceTags": [
-    { "experienceId": "ccccccc1-0000-4000-8000-000000000001", "tag": "망원동" },
-    { "experienceId": "ccccccc1-0000-4000-8000-000000000001", "tag": "오후산책" },
-    { "experienceId": "ccccccc1-0000-4000-8000-000000000001", "tag": "혼자" }
+    {
+      "experienceId": "ccccccc1-0000-4000-8000-000000000001",
+      "tag": "망원동"
+    },
+    {
+      "experienceId": "ccccccc1-0000-4000-8000-000000000001",
+      "tag": "오후산책"
+    },
+    {
+      "experienceId": "ccccccc1-0000-4000-8000-000000000001",
+      "tag": "혼자"
+    },
+    {
+      "experienceId": "ccccccc9-0000-4000-8000-000000000010",
+      "tag": "아침산책"
+    },
+    {
+      "experienceId": "ccccccc9-0000-4000-8000-000000000010",
+      "tag": "한강"
+    },
+    {
+      "experienceId": "ccccccc9-0000-4000-8000-000000000010",
+      "tag": "혼자"
+    },
+    {
+      "experienceId": "ccccccc9-0000-4000-8000-000000000010",
+      "tag": "상쾌함"
+    },
+    {
+      "experienceId": "ccccccc9-0000-4000-8000-000000000011",
+      "tag": "샛강"
+    },
+    {
+      "experienceId": "ccccccc9-0000-4000-8000-000000000011",
+      "tag": "저녁"
+    },
+    {
+      "experienceId": "ccccccc9-0000-4000-8000-000000000011",
+      "tag": "혼자"
+    },
+    {
+      "experienceId": "ccccccc9-0000-4000-8000-000000000012",
+      "tag": "저녁산책"
+    },
+    {
+      "experienceId": "ccccccc9-0000-4000-8000-000000000012",
+      "tag": "반려동물"
+    },
+    {
+      "experienceId": "ccccccc9-0000-4000-8000-000000000012",
+      "tag": "경복궁"
+    },
+    {
+      "experienceId": "ccccccc9-0000-4000-8000-000000000012",
+      "tag": "행복함"
+    },
+    {
+      "experienceId": "ccccccc9-0000-4000-8000-000000000013",
+      "tag": "홍대"
+    },
+    {
+      "experienceId": "ccccccc9-0000-4000-8000-000000000013",
+      "tag": "골목길"
+    },
+    {
+      "experienceId": "ccccccc9-0000-4000-8000-000000000013",
+      "tag": "이동중"
+    },
+    {
+      "experienceId": "ccccccc9-0000-4000-8000-000000000013",
+      "tag": "차분함"
+    },
+    {
+      "experienceId": "ccccccc9-0000-4000-8000-000000000014",
+      "tag": "연남동"
+    },
+    {
+      "experienceId": "ccccccc9-0000-4000-8000-000000000014",
+      "tag": "저녁"
+    },
+    {
+      "experienceId": "ccccccc9-0000-4000-8000-000000000014",
+      "tag": "혼자"
+    },
+    {
+      "experienceId": "ccccccc9-0000-4000-8000-000000000015",
+      "tag": "북한산"
+    },
+    {
+      "experienceId": "ccccccc9-0000-4000-8000-000000000015",
+      "tag": "둘레길"
+    },
+    {
+      "experienceId": "ccccccc9-0000-4000-8000-000000000015",
+      "tag": "아침"
+    },
+    {
+      "experienceId": "ccccccc9-0000-4000-8000-000000000016",
+      "tag": "서울숲"
+    },
+    {
+      "experienceId": "ccccccc9-0000-4000-8000-000000000016",
+      "tag": "반려동물"
+    },
+    {
+      "experienceId": "ccccccc9-0000-4000-8000-000000000016",
+      "tag": "차분함"
+    },
+    {
+      "experienceId": "ccccccc9-0000-4000-8000-000000000017",
+      "tag": "인사동"
+    },
+    {
+      "experienceId": "ccccccc9-0000-4000-8000-000000000017",
+      "tag": "탐험"
+    },
+    {
+      "experienceId": "ccccccc9-0000-4000-8000-000000000017",
+      "tag": "행복함"
+    },
+    {
+      "experienceId": "ccccccc9-0000-4000-8000-000000000018",
+      "tag": "광화문"
+    },
+    {
+      "experienceId": "ccccccc9-0000-4000-8000-000000000018",
+      "tag": "새벽"
+    },
+    {
+      "experienceId": "ccccccc9-0000-4000-8000-000000000018",
+      "tag": "혼자"
+    }
   ]
 }
