@@ -5,7 +5,7 @@
 > 명세 원본: `docs/backend/api-spec.md` (최종 MVP API 14개). 계약 타입·경로 상수는
 > `src/api/types.ts`, HTTP 클라이언트는 `src/api/client.ts`.
 
-기준 시점: 아카이브·홈 `feature/archive-home` (2026-08-14).
+기준 시점: 로그인·설정 `feature/auth-settings` (2026-08-15).
 
 ## 범례
 
@@ -17,9 +17,9 @@
 
 | # | 기능 | Method | Path | 상태 | 구현 위치 / 비고 |
 | --- | --- | --- | --- | --- | --- |
-| 1 | 로그인 (기능 13) | POST | `/auth/login` | ✅ | `client.ts` `login`. `walk-candidate-store`가 `EXPO_PUBLIC_MOCK_LOGIN_ID/PASSWORD` 있을 때 dev 자동 로그인, /debug에 수동 버튼. 로그인 화면 UI는 별도 태스크(팀 소유) |
-| 2 | 내 정보 조회 (기능 13) | GET | `/users/me` | ✅ | `client.ts` `getMe`. `profile-store`가 기록장 헤더의 "OO님의 기록장"에 쓸 닉네임만 읽는다. 실패해도 오류 화면 없이 "나의 기록장"으로 폴백 |
-| 3 | 내 정보 수정 (기능 13) | PATCH | `/users/me` | ⬜ | 〃 (닉네임만) |
+| 1 | 로그인 (기능 13) | POST | `/auth/login` | ✅ | `client.ts` `login` (유일하게 `{ public: true }` — 여기서의 401은 자격 오류지 세션 만료가 아니다). 호출자는 `auth-store.signIn`, 화면은 `/login`. `EXPO_PUBLIC_MOCK_*`는 더 이상 앱을 구동하지 않고 /debug 버튼과 `__DEV__` 폼 프리필 전용 |
+| 2 | 내 정보 조회 (기능 13) | GET | `/users/me` | ✅ | `client.ts` `getMe`. `auth-store`가 ① 부팅 시 저장된 토큰 검증 ② 로그인 직후에 호출해 `user`를 채운다. 기록장 헤더는 그 값을 읽을 뿐 따로 요청하지 않는다. 실패해도 오류 화면 없이 "나의 기록장"으로 폴백 |
+| 3 | 내 정보 수정 (기능 13) | PATCH | `/users/me` | ✅ | `client.ts` `updateMe`. `auth-store.updateNickname`이 호출, 화면은 `/settings` 프로필 카드. 빈 값·30자 초과는 왕복 없이 클라이언트가 거른다 |
 | 4 | 산책 후보 생성 (기능 1) | POST | `/walk-candidates` | ✅ | `client.ts` `createWalkCandidate`. 감지 플로우(`walk-candidate-store`)가 WalkEvent 수신 시 호출. 감지기가 **산책 종료를 판정한 뒤** 1회 발화하므로 POST 시점도 산책 종료 직후이고, 받은 candidateId를 SQLite `walks.candidateId`에 스탬핑. POST 실패 시에도 감지는 candidateId=null로 로컬 보존 |
 | 5 | 산책 후보 조회 (기능 1) | GET | `/walk-candidates/{candidateId}` | ✅ | `client.ts` `getWalkCandidate`. `/walk` 진입 시 서버 상태를 재확인해 스테일 탭(이미 `RECORDING`/`SKIPPED`)을 판별하고 홈으로 되돌린다. 목록 API가 없어 서버 상태를 아는 유일한 경로 |
 | 6 | 산책 후보 변경 (기능 1) | PATCH | `/walk-candidates/{candidateId}` | ✅ | `client.ts` `updateWalkCandidate`, 호출자는 전부 `walk-candidate-store`. ① 감지 직후 종료값(detectedEndAt·durationSeconds) ② `/walk` 진입 시 `SUGGESTED` ③ 남기기 `RECORDING`(종료값 없으면 동반 전송) ④ 건너뛰기 `SKIPPED` |
@@ -34,6 +34,13 @@
 
 서버 API가 **없는 것으로 명세가 확정**한 영역: 권한·자동 감지 ON/OFF·로컬 알림(기능 9),
 상태 관리 전용 API(기능 10), 사진 선택(기능 11), 로그아웃(클라이언트 토큰 삭제, 기능 13).
+**회원가입도 여기 속한다** — `api-spec.md` 기능 13이 "회원가입은 MVP에서 제외합니다"로
+명시하고 사전 생성 계정을 쓴다. `/login`의 회원가입 링크는 폼 대신 안내만 띄운다.
+
+이 영역들에도 이제 화면이 붙어 있다: `/settings`(프로필·닉네임·로그아웃),
+`/settings/detection`(자동 감지 ON/OFF와 알림 발송 플래그 — 둘 다 네이티브
+UserDefaults가 원본이고 `SecureStorePort`가 웹·첫 페인트용 사본을 든다),
+`/settings/permissions`(어댑터에서 실시간으로 읽는 권한 상태). 전부 서버와 무관하다.
 
 ## 구현에 반영된 클라이언트 계약 결정
 
@@ -68,10 +75,20 @@
 3. **`error.code` 어휘가 미공표다** (`INVALID_CREDENTIALS` 하나만 예시).
    → **처분: 비긴급.** HTTP 상태 분기로 동작 중. 공표되면 `types.ts`에 union 반영.
 4. **토큰 정책이 없다** (만료·갱신 규정 부재, 401 시 동작 미정의).
-   → **처분: 모바일 MVP 통상 방안 채택.** 백엔드에는 "넉넉한 TTL, refresh 없음"
-   명시만 요청. 클라이언트는 로그인 화면 태스크에서 토큰 영속화(iOS Keychain =
-   expo-secure-store / web localStorage)와 401 시 토큰 폐기·재로그인 유도를
-   구현한다. 현재는 메모리 보관 + dev env 자동 로그인.
+   → **처분: 클라이언트에서 해소 완료** (`feature/auth-settings`). 백엔드에는
+   "넉넉한 TTL, refresh 없음" 명시만 여전히 요청한다. 출하된 동작:
+   - **영속화** — `SecureStorePort`(iOS 키체인 `AFTER_FIRST_UNLOCK` / web
+     localStorage), 키 `mowa.auth.token.v1`.
+   - **복원은 검증형** — 저장된 토큰으로 `GET /users/me`를 한 번 친다. 200이면
+     로그인 상태, **401이면 폐기하고 로그아웃**, 그 외(네트워크·5xx)는 **세션을
+     유지**한다. 네트워크 실패를 세션 실패로 취급하면 mock이 꺼진 평소 개발
+     상태와 백엔드가 없는 배포 웹에서 사용자를 계속 튕겨내기 때문이다.
+   - **401 처리는 `requestJson` 한 곳** — 토큰을 비우고 등록된 핸들러를 1회만
+     호출한다(동시 401 N개도 1회). 화면은 401을 직접 알지 못하고, 루트
+     레이아웃의 게이트가 `status`를 보고 `/onboarding`으로 보낸다.
+   - **로그아웃 = 토큰 삭제 + 사용자 범위 스토어 리셋**. 서버 API는 없다(명세).
+   - mock 토큰은 만료가 없어 401 경로가 자연 발생하지 않는다. /debug의
+     "Plant bogus token (force 401)" 버튼이 재현 수단이다.
 5. **`POST /walk-candidates`에 멱등 키가 없다** — 같은 감지를 재전송하면 중복
    후보가 생긴다.
    → **처분: 무해 판정.** 후보는 스테이징 데이터라 중복이 생겨도 사용자에게
