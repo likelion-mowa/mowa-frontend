@@ -24,6 +24,10 @@ class WalkDetectorModule extends NativeModule<WalkDetectorModuleEvents> {
     return false;
   }
 
+  async setNotificationsEnabled(_enabled: boolean): Promise<boolean> {
+    return false;
+  }
+
   async queryHistory(_sinceMs: number): Promise<WalkEvent[]> {
     return [];
   }
@@ -39,6 +43,7 @@ class WalkDetectorModule extends NativeModule<WalkDetectorModuleEvents> {
       mechanism: 'none',
       locationAuthorization: 'unavailable',
       warnings: [],
+      notificationsEnabled: false,
       activity: '-',
       confidence: '-',
       currentSteps: 0,

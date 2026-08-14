@@ -55,6 +55,15 @@ export type WalkDetectorDiagnostics = {
   locationAuthorization: string;
   /** Dev-facing preflight warnings from the native core (Korean). Empty = healthy. */
   warnings: string[];
+  /**
+   * 설정 > 기록 제안 알림. Lives in UserDefaults, so this is the read-back —
+   * never assume the JS copy and this agree after a reinstall (the Keychain
+   * outlives app deletion; UserDefaults does not).
+   *
+   * Required, not optional: that is what forces both web stubs to construct it
+   * and keeps tsc as the check on the two implementations staying in sync.
+   */
+  notificationsEnabled: boolean;
 
   /**
    * Walk-session state. A detector that stays quiet is doing one of a few

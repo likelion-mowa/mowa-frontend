@@ -51,6 +51,13 @@ export interface WalkDetectorPort {
    */
   start(mechanism?: WalkMechanism): Promise<AdapterResult<boolean>>;
   stop(): Promise<AdapterResult<boolean>>;
+  /**
+   * Withholds the walk notification while leaving detection running (설정 >
+   * 기록 제안 알림). The Core posts the notification itself, so this is the
+   * only honest way to expose that switch — a JS-side flag could not suppress
+   * anything.
+   */
+  setNotificationsEnabled(enabled: boolean): Promise<AdapterResult<boolean>>;
   queryHistory(sinceMs: number): Promise<AdapterResult<WalkEvent[]>>;
   getDiagnostics(): Promise<AdapterResult<WalkDetectorDiagnostics>>;
   emitTestEvent(): Promise<AdapterResult<boolean>>;

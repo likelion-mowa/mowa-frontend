@@ -145,8 +145,20 @@ public class WalkDetectorModule: Module {
           "endDebounceSeconds": (status["endDebounceSeconds"] as? Double) ?? 0,
           "lastActivityAtMs": status["lastActivityAtMs"] ?? NSNull(),
           "lastPedometerAtMs": status["lastPedometerAtMs"] ?? NSNull(),
+          // 설정 > 기록 제안 알림. Read back rather than mirrored in JS: the
+          // value lives in UserDefaults, which survives a reinstall differently
+          // than the Keychain-backed JS copy does.
+          "notificationsEnabled": WalkDetectorCore.shared.notificationsEnabled,
         ] as [String: Any])
       }
+    }
+
+    // Separate from `start` on purpose: widening an existing AsyncFunction's
+    // arity changes argument marshalling, which no gate in this repo verifies.
+    // A new single-argument function cannot break the existing call.
+    AsyncFunction("setNotificationsEnabled") { (enabled: Bool) -> Bool in
+      WalkDetectorCore.shared.notificationsEnabled = enabled
+      return true
     }
 
     AsyncFunction("emitTestEvent") { () -> Bool in

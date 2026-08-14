@@ -22,6 +22,10 @@ export const walkDetector: WalkDetectorPort = {
     return { ok: false, error: 'Walk detection requires CoreMotion and is iOS-only.' };
   },
 
+  async setNotificationsEnabled() {
+    return { ok: false, error: 'Walk notifications are posted natively and are iOS-only.' };
+  },
+
   async queryHistory() {
     return { ok: true, value: [] };
   },
@@ -39,6 +43,7 @@ export const walkDetector: WalkDetectorPort = {
         mechanism: 'none',
         locationAuthorization: 'unavailable',
         warnings: [],
+        notificationsEnabled: false,
         activity: '-',
         confidence: '-',
         currentSteps: 0,

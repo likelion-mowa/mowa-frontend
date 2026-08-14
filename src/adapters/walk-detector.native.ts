@@ -29,6 +29,14 @@ export const walkDetector: WalkDetectorPort = {
     }
   },
 
+  async setNotificationsEnabled(enabled) {
+    try {
+      return { ok: true, value: await WalkDetector.setNotificationsEnabled(enabled) };
+    } catch (error) {
+      return toError(error);
+    }
+  },
+
   async queryHistory(sinceMs) {
     try {
       return { ok: true, value: await WalkDetector.queryHistory(sinceMs) };
