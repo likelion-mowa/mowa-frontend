@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Pressable, ScrollView, Text, View } from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import { Animated, Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Redirect, router } from 'expo-router';
 
@@ -16,6 +16,8 @@ import {
 } from '@/api/types';
 import { PrimaryButton } from '@/components/buttons';
 import { ScreenHeader } from '@/components/screen-header';
+import { useAnimatedToggle, usePressScale } from '@/lib/animations';
+import { colors } from '@/lib/theme';
 import { useDiaryFlow } from '@/stores/diary-flow-store';
 
 /**
@@ -28,6 +30,10 @@ import { useDiaryFlow } from '@/stores/diary-flow-store';
  * multi-select: the spec's emotions[] and the prototype's own copy ("여러 개를
  * 선택해도 괜찮아요") agree, even though the prototype's implementation was
  * single-select.
+ *
+ * Motion mirrors the prototype's CSS transitions via RN Animated: option
+ * selection eases over ~220ms (duration-200), the step dots morph over 300ms
+ * (duration-300), and each step's content slides in like the prototype's rail.
  */
 
 const COMPANION_EMOJI: Record<Companion, string> = {
@@ -52,8 +58,22 @@ const SITUATION_EMOJI: Record<Situation, string> = {
   EXPLORING: '🗺️',
 };
 
-const pressedScale = ({ pressed }: { pressed: boolean }) =>
-  pressed ? { transform: [{ scale: 0.97 }] } : undefined;
+/** Selection colors easing between the unselected and sage states. */
+function useSelectColors(selected: boolean) {
+  const anim = useAnimatedToggle(selected, 220);
+  return {
+    backgroundColor: anim.interpolate({
+      inputRange: [0, 1],
+      outputRange: [colors.white, colors.sage],
+    }),
+    borderColor: anim.interpolate({
+      inputRange: [0, 1],
+      outputRange: [colors.line, colors.sage],
+    }),
+    labelColor: anim.interpolate({ inputRange: [0, 1], outputRange: [colors.ink, colors.white] }),
+    checkOpacity: anim,
+  };
+}
 
 function WideOption({
   emoji,
@@ -66,19 +86,37 @@ function WideOption({
   selected: boolean;
   onPress: () => void;
 }) {
+  const { scale, onPressIn, onPressOut } = usePressScale();
+  const sel = useSelectColors(selected);
   return (
     <Pressable
       accessibilityRole="button"
       onPress={onPress}
-      style={pressedScale}
-      className={`mb-3 flex-row items-center rounded-2xl border-2 px-5 py-4 ${
-        selected ? 'border-sage bg-sage' : 'border-line bg-white'
-      }`}>
-      <Text className="text-3xl">{emoji}</Text>
-      <Text className={`ml-4 text-[17px] font-semibold ${selected ? 'text-white' : 'text-ink'}`}>
-        {label}
-      </Text>
-      {selected ? <Text className="ml-auto text-lg text-white/80">✓</Text> : null}
+      onPressIn={onPressIn}
+      onPressOut={onPressOut}
+      className="mb-3">
+      {/* Scale on the native driver, colors on the JS driver — separate views. */}
+      <Animated.View style={{ transform: [{ scale }] }}>
+        <Animated.View
+          style={{
+            backgroundColor: sel.backgroundColor,
+            borderColor: sel.borderColor,
+            borderWidth: 2,
+            borderRadius: 16,
+          }}>
+          <View className="flex-row items-center px-5 py-4">
+            <Text className="text-3xl">{emoji}</Text>
+            <Animated.Text
+              style={{ marginLeft: 16, fontSize: 17, fontWeight: '600', color: sel.labelColor }}>
+              {label}
+            </Animated.Text>
+            <View className="flex-1" />
+            <Animated.Text style={{ fontSize: 18, color: colors.white, opacity: sel.checkOpacity }}>
+              ✓
+            </Animated.Text>
+          </View>
+        </Animated.View>
+      </Animated.View>
     </Pressable>
   );
 }
@@ -94,18 +132,32 @@ function GridOption({
   selected: boolean;
   onPress: () => void;
 }) {
+  const { scale, onPressIn, onPressOut } = usePressScale();
+  const sel = useSelectColors(selected);
   return (
     <Pressable
       accessibilityRole="button"
       onPress={onPress}
-      style={pressedScale}
-      className={`mb-3 w-[48%] items-center rounded-2xl border-2 py-6 ${
-        selected ? 'border-sage bg-sage' : 'border-line bg-white'
-      }`}>
-      <Text className="text-3xl">{emoji}</Text>
-      <Text className={`mt-2 text-[15px] font-semibold ${selected ? 'text-white' : 'text-ink'}`}>
-        {label}
-      </Text>
+      onPressIn={onPressIn}
+      onPressOut={onPressOut}
+      className="mb-3 w-[48%]">
+      <Animated.View style={{ transform: [{ scale }] }}>
+        <Animated.View
+          style={{
+            backgroundColor: sel.backgroundColor,
+            borderColor: sel.borderColor,
+            borderWidth: 2,
+            borderRadius: 16,
+          }}>
+          <View className="items-center py-6">
+            <Text className="text-3xl">{emoji}</Text>
+            <Animated.Text
+              style={{ marginTop: 8, fontSize: 15, fontWeight: '600', color: sel.labelColor }}>
+              {label}
+            </Animated.Text>
+          </View>
+        </Animated.View>
+      </Animated.View>
     </Pressable>
   );
 }
@@ -148,6 +200,26 @@ function OptionGridRows<T extends string>({
   );
 }
 
+/** Prototype step dots: the active dot widens 6→20 and reached dots turn sage, over 300ms. */
+function StepDot({ reached, active }: { reached: boolean; active: boolean }) {
+  const activeAnim = useAnimatedToggle(active, 300);
+  const reachedAnim = useAnimatedToggle(reached, 300);
+  return (
+    <Animated.View
+      style={{
+        height: 6,
+        borderRadius: 999,
+        marginHorizontal: 2,
+        width: activeAnim.interpolate({ inputRange: [0, 1], outputRange: [6, 20] }),
+        backgroundColor: reachedAnim.interpolate({
+          inputRange: [0, 1],
+          outputRange: [colors.line, colors.sage],
+        }),
+      }}
+    />
+  );
+}
+
 export default function DiaryContextScreen() {
   const walk = useDiaryFlow((state) => state.walk);
   const companion = useDiaryFlow((state) => state.companion);
@@ -158,6 +230,22 @@ export default function DiaryContextScreen() {
   const setSituation = useDiaryFlow((state) => state.setSituation);
 
   const [step, setStep] = useState<1 | 2 | 3>(1);
+
+  // Direction-aware slide-in on step change, echoing the prototype's rail.
+  const slideX = useRef(new Animated.Value(0)).current;
+  const slideOpacity = useRef(new Animated.Value(1)).current;
+  const previousStep = useRef(step);
+  useEffect(() => {
+    if (previousStep.current === step) return;
+    const forward = step > previousStep.current;
+    previousStep.current = step;
+    slideX.setValue(forward ? 32 : -32);
+    slideOpacity.setValue(0);
+    Animated.parallel([
+      Animated.timing(slideX, { toValue: 0, duration: 260, useNativeDriver: true }),
+      Animated.timing(slideOpacity, { toValue: 1, duration: 260, useNativeDriver: true }),
+    ]).start();
+  }, [step, slideX, slideOpacity]);
 
   if (walk === null) {
     return <Redirect href="/" />;
@@ -186,12 +274,7 @@ export default function DiaryContextScreen() {
         center={
           <View className="flex-row items-center">
             {([1, 2, 3] as const).map((dot) => (
-              <View
-                key={dot}
-                className={`mx-0.5 h-1.5 rounded-full ${
-                  dot === step ? 'w-5 bg-sage' : dot < step ? 'w-1.5 bg-sage' : 'w-1.5 bg-line'
-                }`}
-              />
+              <StepDot key={dot} reached={dot <= step} active={dot === step} />
             ))}
           </View>
         }
@@ -201,44 +284,46 @@ export default function DiaryContextScreen() {
       </View>
 
       <ScrollView className="flex-1 px-5 pt-4" contentContainerClassName="pb-4">
-        <Text className="mb-1.5 text-[28px] font-bold leading-tight text-ink">
-          {steps[step].question}
-        </Text>
-        <Text className="mb-8 text-sm text-ink-muted">{steps[step].sub}</Text>
+        <Animated.View style={{ transform: [{ translateX: slideX }], opacity: slideOpacity }}>
+          <Text className="mb-1.5 text-[28px] font-bold leading-tight text-ink">
+            {steps[step].question}
+          </Text>
+          <Text className="mb-8 text-sm text-ink-muted">{steps[step].sub}</Text>
 
-        {step === 1 ? (
-          <View>
-            {COMPANIONS.map((code) => (
-              <WideOption
-                key={code}
-                emoji={COMPANION_EMOJI[code]}
-                label={COMPANION_LABELS[code]}
-                selected={companion === code}
-                onPress={() => setCompanion(companion === code ? null : code)}
-              />
-            ))}
-          </View>
-        ) : null}
+          {step === 1 ? (
+            <View>
+              {COMPANIONS.map((code) => (
+                <WideOption
+                  key={code}
+                  emoji={COMPANION_EMOJI[code]}
+                  label={COMPANION_LABELS[code]}
+                  selected={companion === code}
+                  onPress={() => setCompanion(companion === code ? null : code)}
+                />
+              ))}
+            </View>
+          ) : null}
 
-        {step === 2 ? (
-          <OptionGridRows
-            codes={EMOTIONS}
-            emoji={EMOTION_EMOJI}
-            labels={EMOTION_LABELS}
-            isSelected={(code) => emotions.includes(code)}
-            onToggle={toggleEmotion}
-          />
-        ) : null}
+          {step === 2 ? (
+            <OptionGridRows
+              codes={EMOTIONS}
+              emoji={EMOTION_EMOJI}
+              labels={EMOTION_LABELS}
+              isSelected={(code) => emotions.includes(code)}
+              onToggle={toggleEmotion}
+            />
+          ) : null}
 
-        {step === 3 ? (
-          <OptionGridRows
-            codes={SITUATIONS}
-            emoji={SITUATION_EMOJI}
-            labels={SITUATION_LABELS}
-            isSelected={(code) => situation === code}
-            onToggle={(code) => setSituation(situation === code ? null : code)}
-          />
-        ) : null}
+          {step === 3 ? (
+            <OptionGridRows
+              codes={SITUATIONS}
+              emoji={SITUATION_EMOJI}
+              labels={SITUATION_LABELS}
+              isSelected={(code) => situation === code}
+              onToggle={(code) => setSituation(situation === code ? null : code)}
+            />
+          ) : null}
+        </Animated.View>
       </ScrollView>
 
       <View className="px-5 pb-8 pt-3">

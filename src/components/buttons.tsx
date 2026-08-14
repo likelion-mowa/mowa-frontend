@@ -1,12 +1,13 @@
-import { Pressable, Text } from 'react-native';
+import { Animated, Pressable, Text, View } from 'react-native';
 
+import { usePressScale } from '@/lib/animations';
 import { shadows } from '@/lib/theme';
 
 /**
  * The prototype's two button styles, used on every diary-flow screen:
- * primary = solid sage, secondary = parchment with a border. Presses scale to
- * 0.97 like the prototype's active:scale-[0.97] (RN pressed style, since
- * NativeWind's transition classes are unverified on this stack).
+ * primary = solid sage, secondary = parchment with a border. Presses ease to
+ * 0.97 and back (prototype `active:scale-[0.97]` + `duration-200`), via an
+ * Animated scale inside the Pressable.
  */
 
 type ButtonProps = {
@@ -19,9 +20,6 @@ type ButtonProps = {
   className?: string;
 };
 
-const pressedScale = ({ pressed }: { pressed: boolean }) =>
-  pressed ? { transform: [{ scale: 0.97 }] } : undefined;
-
 export function PrimaryButton({
   label,
   onPress,
@@ -29,27 +27,39 @@ export function PrimaryButton({
   glow = false,
   className = '',
 }: ButtonProps) {
+  const { scale, onPressIn, onPressOut } = usePressScale();
   return (
     <Pressable
       accessibilityRole="button"
       disabled={disabled}
       onPress={onPress}
-      style={(state) => [glow && !disabled ? shadows.ctaGlow : null, pressedScale(state)]}
-      className={`rounded-xl bg-sage px-4 py-3.5 active:opacity-80 ${disabled ? 'opacity-50' : ''} ${className}`}>
-      <Text className="text-center text-sm font-semibold text-white">{label}</Text>
+      onPressIn={onPressIn}
+      onPressOut={onPressOut}
+      className={`${disabled ? 'opacity-50' : ''} ${className}`}>
+      <Animated.View style={[{ transform: [{ scale }] }, glow && !disabled ? shadows.ctaGlow : null]}>
+        <View className="rounded-xl bg-sage px-4 py-3.5">
+          <Text className="text-center text-sm font-semibold text-white">{label}</Text>
+        </View>
+      </Animated.View>
     </Pressable>
   );
 }
 
 export function SecondaryButton({ label, onPress, disabled = false, className = '' }: ButtonProps) {
+  const { scale, onPressIn, onPressOut } = usePressScale();
   return (
     <Pressable
       accessibilityRole="button"
       disabled={disabled}
       onPress={onPress}
-      style={pressedScale}
-      className={`rounded-xl border border-line bg-parchment-dark px-4 py-3.5 active:opacity-80 ${disabled ? 'opacity-50' : ''} ${className}`}>
-      <Text className="text-center text-sm font-medium text-ink-muted">{label}</Text>
+      onPressIn={onPressIn}
+      onPressOut={onPressOut}
+      className={`${disabled ? 'opacity-50' : ''} ${className}`}>
+      <Animated.View style={{ transform: [{ scale }] }}>
+        <View className="rounded-xl border border-line bg-parchment-dark px-4 py-3.5">
+          <Text className="text-center text-sm font-medium text-ink-muted">{label}</Text>
+        </View>
+      </Animated.View>
     </Pressable>
   );
 }
