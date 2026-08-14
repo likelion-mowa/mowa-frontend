@@ -1,0 +1,17 @@
+{
+  "sage": "#60953c",
+  "sageLight": "#7db050",
+  "sagePale": "#e8f2df",
+  "sageDark": "#4e7a2f",
+  "sageDeep": "#3b5c23",
+  "parchment": "#F9F7F6",
+  "parchmentMid": "#F0EEEC",
+  "parchmentDark": "#E8E5E2",
+  "ink": "#111827",
+  "inkMid": "#374151",
+  "inkMuted": "#6B7280",
+  "inkSubtle": "#9CA3AF",
+  "line": "#E5E7EB",
+  "lineLight": "#F3F4F6",
+  "white": "#FFFFFF"
+}

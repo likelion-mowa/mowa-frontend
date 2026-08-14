@@ -157,6 +157,25 @@ export type DetectedWalk = {
   candidateId: string | null;
 };
 
+/**
+ * A photo the user picked or captured for the diary flow.
+ *
+ * `uri` is whatever the platform hands back — an app-sandbox `file://` URI on
+ * iOS, an object URL on web. Per the team decision (2026-08-14) this string is
+ * sent as `photoUrl` verbatim until an Object Storage is chosen; it renders on
+ * the device that picked it and nowhere else.
+ */
+export type PickedPhoto = {
+  uri: string;
+};
+
+export interface PhotoPickerPort {
+  readonly isAvailable: boolean;
+  /** Resolves `null` when the user cancelled the picker — that is not an error. */
+  pickFromLibrary(): Promise<AdapterResult<PickedPhoto | null>>;
+  captureWithCamera(): Promise<AdapterResult<PickedPhoto | null>>;
+}
+
 export interface StoragePort {
   /** True when backed by real persistence (SQLite). False for the web mock. */
   readonly isPersistent: boolean;

@@ -5,7 +5,7 @@
 > 명세 원본: `docs/backend/api-spec.md` (최종 MVP API 14개). 계약 타입·경로 상수는
 > `src/api/types.ts`, HTTP 클라이언트는 `src/api/client.ts`.
 
-기준 시점: PR B `feature/walk-suggestion` (2026-08-13).
+기준 시점: 일기 플로우 `feature/diary-flow` (2026-08-14).
 
 ## 범례
 
@@ -23,12 +23,12 @@
 | 4 | 산책 후보 생성 (기능 1) | POST | `/walk-candidates` | ✅ | `client.ts` `createWalkCandidate`. 감지 플로우(`walk-candidate-store`)가 WalkEvent 수신 시 호출. 감지기가 **산책 종료를 판정한 뒤** 1회 발화하므로 POST 시점도 산책 종료 직후이고, 받은 candidateId를 SQLite `walks.candidateId`에 스탬핑. POST 실패 시에도 감지는 candidateId=null로 로컬 보존 |
 | 5 | 산책 후보 조회 (기능 1) | GET | `/walk-candidates/{candidateId}` | ✅ | `client.ts` `getWalkCandidate`. `/walk` 진입 시 서버 상태를 재확인해 스테일 탭(이미 `RECORDING`/`SKIPPED`)을 판별하고 홈으로 되돌린다. 목록 API가 없어 서버 상태를 아는 유일한 경로 |
 | 6 | 산책 후보 변경 (기능 1) | PATCH | `/walk-candidates/{candidateId}` | ✅ | `client.ts` `updateWalkCandidate`, 호출자는 전부 `walk-candidate-store`. ① 감지 직후 종료값(detectedEndAt·durationSeconds) ② `/walk` 진입 시 `SUGGESTED` ③ 남기기 `RECORDING`(종료값 없으면 동반 전송) ④ 건너뛰기 `SKIPPED` |
-| 7 | 경험 초안 생성 (기능 2) | POST | `/walk-candidates/{candidateId}/experience-drafts` | ⬜ | 일기 플로우 단계 |
-| 8 | 경험 초안 수정 (기능 2·3) | PATCH | `/experience-drafts/{draftId}` | ⬜ | 〃. emotions[]는 전체 교체 |
-| 9 | AI 일기 생성 (기능 4) | POST | `/experience-drafts/{draftId}/ai-generation` | ⬜ | 〃. 본문 없는 POST |
-| 10 | 경험 확정 (기능 5) | POST | `/walk-experiences` | ⬜ | ⚠️ Candidate의 종료 시각·지속 시간 누락은 명세상 거부 — 종료값 PATCH가 선행돼야 한다 (아래 공백 2) |
+| 7 | 경험 초안 생성 (기능 2) | POST | `/walk-candidates/{candidateId}/experience-drafts` | ✅ | `client.ts` `createExperienceDraft`. `diary-flow-store`의 첫 generate()가 사용자가 설정한 입력만 담아 호출 (미입력 값은 생략 — 명세의 "서버가 임의로 생성하지 않는다") |
+| 8 | 경험 초안 수정 (기능 2·3) | PATCH | `/experience-drafts/{draftId}` | ✅ | `client.ts` `updateExperienceDraft`. FAILED 재시도 전에 입력이 바뀐 경우에만 전체 현재값으로 호출 (emotions[] 전체 교체, null=제거) |
+| 9 | AI 일기 생성 (기능 4) | POST | `/experience-drafts/{draftId}/ai-generation` | ✅ | `client.ts` `generateAiDiary`. 본문 없는 POST. FAILED → 같은 호출로 수동 재시도. `/debug` 강제 실패 토글만 mock의 `?fail=1`을 붙인다 (dev 전용) |
+| 10 | 경험 확정 (기능 5) | POST | `/walk-experiences` | ✅ | `client.ts` `createWalkExperience`. 미리보기·수정 화면의 저장이 사용자 확정값(제목·본문·태그·감정 등)을 스냅샷으로 전송. SUCCESS 후의 입력 수정도 이 POST에 실린다 (draft는 SUCCESS에서 불변) |
 | 11 | 아카이브 목록 (기능 6·12) | GET | `/walk-experiences` | ⬜ | from/to/tag 조합 규칙은 `types.ts` `isValidListQuery`에 선반영 |
-| 12 | 상세 조회 (기능 7) | GET | `/walk-experiences/{experienceId}` | ⬜ | |
+| 12 | 상세 조회 (기능 7) | GET | `/walk-experiences/{experienceId}` | ✅ | `client.ts` `getWalkExperience`. `/experiences/[experienceId]` 상세 화면 (`experience-store`). 일기 플로우 완료가 여기로 랜딩 |
 | 13 | 경험 수정 (기능 8) | PATCH | `/walk-experiences/{experienceId}` | ⬜ | title은 비울 수 없음. emotions/tags 전체 교체 |
 | 14 | 경험 삭제 (기능 8) | DELETE | `/walk-experiences/{experienceId}` | ⬜ | Soft delete. 같은 Draft로 재생성 불가 |
 

@@ -10,13 +10,20 @@
  */
 import {
   endpoints,
+  type AiGenerationResponse,
   type ApiEnvelope,
+  type CreateExperienceDraftRequest,
   type CreateWalkCandidateRequest,
+  type CreateWalkExperienceRequest,
+  type CreateWalkExperienceResponse,
+  type ExperienceDraft,
   type LoginRequest,
   type LoginResponse,
+  type UpdateExperienceDraftRequest,
   type UpdateWalkCandidateRequest,
   type Uuid,
   type WalkCandidate,
+  type WalkExperienceDetail,
 } from './types';
 
 /**
@@ -127,5 +134,46 @@ export const api = {
     body: UpdateWalkCandidateRequest,
   ): Promise<ApiResult<WalkCandidate>> {
     return requestJson<WalkCandidate>('PATCH', endpoints.walkCandidate(candidateId), body);
+  },
+
+  /** Requires the candidate to be RECORDING; one draft per candidate (FK+UNIQUE). */
+  createExperienceDraft(
+    candidateId: Uuid,
+    body: CreateExperienceDraftRequest,
+  ): Promise<ApiResult<ExperienceDraft>> {
+    return requestJson<ExperienceDraft>('POST', endpoints.experienceDrafts(candidateId), body);
+  },
+
+  /** Allowed only while the draft is PENDING or FAILED. */
+  updateExperienceDraft(
+    draftId: Uuid,
+    body: UpdateExperienceDraftRequest,
+  ): Promise<ApiResult<ExperienceDraft>> {
+    return requestJson<ExperienceDraft>('PATCH', endpoints.experienceDraft(draftId), body);
+  },
+
+  /**
+   * Bodyless by spec — the server reads the draft and candidate itself.
+   * `forceFail` is a dev-only hook for the mock's `?fail=1` switch (the only
+   * way to exercise the FAILED branch in-app); product code never sets it.
+   */
+  generateAiDiary(
+    draftId: Uuid,
+    options?: { forceFail?: boolean },
+  ): Promise<ApiResult<AiGenerationResponse>> {
+    const suffix = options?.forceFail ? '?fail=1' : '';
+    return requestJson<AiGenerationResponse>('POST', `${endpoints.aiGeneration(draftId)}${suffix}`);
+  },
+
+  /** Finalize (기능 5). Draft must be SUCCESS; a second call for the same draft is 409. */
+  createWalkExperience(
+    body: CreateWalkExperienceRequest,
+  ): Promise<ApiResult<CreateWalkExperienceResponse>> {
+    return requestJson<CreateWalkExperienceResponse>('POST', endpoints.walkExperiences(), body);
+  },
+
+  /** Detail (기능 7). Missing, deleted and foreign experiences are all 404. */
+  getWalkExperience(experienceId: Uuid): Promise<ApiResult<WalkExperienceDetail>> {
+    return requestJson<WalkExperienceDetail>('GET', endpoints.walkExperience(experienceId));
   },
 };

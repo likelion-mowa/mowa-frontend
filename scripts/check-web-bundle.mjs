@@ -22,6 +22,9 @@ const MUST_BE_ABSENT = [
   'react-native-nitro-modules',
   'CMPedometer',
   'expo-sqlite/',
+  // Only photo-picker.native.ts may import this; the web adapter is a DOM
+  // file input precisely so this specifier never reaches the web graph.
+  'expo-image-picker',
 ];
 
 /** Things whose absence means the bundle is broken or the split went too far. */
@@ -34,11 +37,17 @@ const MUST_BE_PRESENT = [
   ['endpoint /walk-experiences', '/walk-experiences'],
   ['endpoint /experience-drafts', '/experience-drafts'],
   ['Korean label 생각에 잠긴', '생각에 잠긴'],
-  // The suggestion screen's two spec-mandated button labels. A screen whose
-  // import graph broke would still export an HTML file, so the proof that
-  // /walk actually shipped is its copy being in the JS bundle.
-  ['/walk button 남기기', '남기기'],
-  ['/walk button 건너뛰기', '건너뛰기'],
+  // Screen copy as shipped-proof: a screen whose import graph broke would
+  // still export an HTML file, so the proof a screen actually shipped is its
+  // copy being in the JS bundle. The /walk labels are the prototype's
+  // (저장할게요/괜찮아요 replaced the spec terms 남기기/건너뛰기 in the
+  // 2026-08-14 restyle); the rest are one headline per diary-flow screen.
+  ['/walk button 저장할게요', '저장할게요'],
+  ['/walk button 괜찮아요', '괜찮아요'],
+  ['diary photo headline', '사진이 있나요?'],
+  ['diary generating headline', '산책 기억을 만들고 있어요'],
+  ['diary failure headline', '산책 기억을 만들지 못했어요'],
+  ['diary preview header', '산책 기억 미리보기'],
 ];
 
 let bundles;

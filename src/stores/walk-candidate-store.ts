@@ -221,13 +221,19 @@ export const useWalkCandidateFlow = create<WalkCandidateFlowState>((set, get) =>
       `suggestion: candidate ${updated.value.status}` +
         (status === 'RECORDING' ? ` endSource=${endSource ?? 'server'}` : ''),
     );
+    // The server response is the freshest truth, and for an entry-time
+    // fallback it is the ONLY place the stamped end values exist — the diary
+    // flow copies them from here, so dropping them showed 소요 시간 '—'.
+    const serverEnd = updated.value.detectedEndAt;
     set({
       suggestionPhase: 'done',
       activeCandidate: {
         ...active,
         serverStatus: updated.value.status,
-        endSyncedToServer: updated.value.detectedEndAt !== null,
+        endSyncedToServer: serverEnd !== null,
         endSource,
+        endedAtMs: serverEnd !== null ? fromIsoDateTime(serverEnd) : active.endedAtMs,
+        durationSeconds: updated.value.durationSeconds ?? active.durationSeconds,
       },
     });
   };
@@ -374,10 +380,21 @@ export const useWalkCandidateFlow = create<WalkCandidateFlowState>((set, get) =>
           active.endSource = active.endSource ?? 'detector';
         }
 
-        if (server.status === 'RECORDING' || server.status === 'SKIPPED') {
+        if (server.status === 'SKIPPED') {
           // A notification stays in Notification Center until it is replaced,
           // so a tap can arrive long after the walk was already handled.
-          giveUp(`suggestion: stale tap — candidate is already ${server.status}`);
+          giveUp('suggestion: stale tap — candidate is already SKIPPED');
+          return;
+        }
+
+        if (server.status === 'RECORDING') {
+          // Not stale — the user chose 저장할게요 and left the diary flow
+          // before finishing. The server's transition table pins the candidate
+          // at RECORDING forever, so bouncing this tap home would make the
+          // walk permanently unrecordable. Hand it straight back to the flow;
+          // /walk's redirect reads phase 'done' + RECORDING as "resume diary".
+          append('suggestion: candidate already RECORDING — resuming the diary flow');
+          set({ suggestionPhase: 'done', activeCandidate: active });
           return;
         }
 
