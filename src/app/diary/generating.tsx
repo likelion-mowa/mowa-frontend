@@ -131,6 +131,7 @@ function LoadingBody() {
 
 export default function DiaryGeneratingScreen() {
   const walk = useDiaryFlow((state) => state.walk);
+  const experienceId = useDiaryFlow((state) => state.experienceId);
   const phase = useDiaryFlow((state) => state.generationPhase);
   const generate = useDiaryFlow((state) => state.generate);
 
@@ -144,6 +145,10 @@ export default function DiaryGeneratingScreen() {
 
   if (walk === null) {
     return <Redirect href="/" />;
+  }
+  // Completed flows are read-only — see the photo screen's guard.
+  if (experienceId !== null) {
+    return <Redirect href="/diary/done" />;
   }
 
   if (phase === 'failed') {

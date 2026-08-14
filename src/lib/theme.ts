@@ -1,29 +1,14 @@
 /**
  * Prototype palette as JS values, for the places className cannot reach —
- * react-native-svg stroke/fill props and ActivityIndicator tints.
- *
- * MUST stay in sync with tailwind.config.js `theme.extend.colors` (same hex,
- * same names). Everything styleable with className uses the Tailwind names;
- * this file exists only for component props.
+ * react-native-svg stroke/fill props, Animated color interpolations and
+ * shadows. `palette.json` is the single source; tailwind.config.js requires
+ * the same file, so className colors and these values cannot drift apart.
  */
 import type { ViewStyle } from 'react-native';
 
-export const colors = {
-  sage: '#60953c',
-  sageLight: '#7db050',
-  sagePale: '#e8f2df',
-  sageDark: '#4e7a2f',
-  sageDeep: '#3b5c23',
-  parchment: '#F9F7F6',
-  parchmentMid: '#F0EEEC',
-  parchmentDark: '#E8E5E2',
-  ink: '#111827',
-  inkMid: '#374151',
-  inkMuted: '#6B7280',
-  inkSubtle: '#9CA3AF',
-  line: '#E5E7EB',
-  white: '#FFFFFF',
-} as const;
+import palette from './palette.json';
+
+export const colors = palette;
 
 /**
  * The prototype's box-shadows, as RN shadow props (styleable via className
@@ -50,14 +35,14 @@ export const shadows = {
   },
   /** Prototype `0 4px 16px rgba(96,149,60,0.3)` on green CTAs. */
   ctaGlow: {
-    shadowColor: '#60953c',
+    shadowColor: palette.sage,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 8,
   },
   /** Prototype `0 2px 8px rgba(96,149,60,0.4)` on the small sage badges. */
   badgeGlow: {
-    shadowColor: '#60953c',
+    shadowColor: palette.sage,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.4,
     shadowRadius: 4,

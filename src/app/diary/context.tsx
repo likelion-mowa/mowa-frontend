@@ -222,6 +222,8 @@ function StepDot({ reached, active }: { reached: boolean; active: boolean }) {
 
 export default function DiaryContextScreen() {
   const walk = useDiaryFlow((state) => state.walk);
+  const experienceId = useDiaryFlow((state) => state.experienceId);
+  const generationPhase = useDiaryFlow((state) => state.generationPhase);
   const companion = useDiaryFlow((state) => state.companion);
   const emotions = useDiaryFlow((state) => state.emotions);
   const situation = useDiaryFlow((state) => state.situation);
@@ -250,8 +252,16 @@ export default function DiaryContextScreen() {
   if (walk === null) {
     return <Redirect href="/" />;
   }
+  // Completed flows are read-only — see the photo screen's guard.
+  if (experienceId !== null) {
+    return <Redirect href="/diary/done" />;
+  }
 
-  const goGenerate = () => router.push('/diary/generating');
+  // After SUCCESS the draft can neither be patched nor regenerated (spec), so
+  // input changes ride on the final snapshot POST — going through the loading
+  // screen again would be a no-op dressed as work. Straight to the preview.
+  const goGenerate = () =>
+    router.push(generationPhase === 'success' ? '/diary/preview' : '/diary/generating');
   const handleBack = () => {
     if (step === 1) router.back();
     else setStep((current) => (current - 1) as 1 | 2);

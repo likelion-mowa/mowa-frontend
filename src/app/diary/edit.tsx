@@ -25,23 +25,21 @@ export default function DiaryEditScreen() {
   const storedTags = useDiaryFlow((state) => state.tags);
   const savePhase = useDiaryFlow((state) => state.savePhase);
   const saveError = useDiaryFlow((state) => state.saveError);
-  const applyEdit = useDiaryFlow((state) => state.applyEdit);
-  const save = useDiaryFlow((state) => state.save);
+  const experienceId = useDiaryFlow((state) => state.experienceId);
+  const applyEditAndSave = useDiaryFlow((state) => state.applyEditAndSave);
+  const clearSaveError = useDiaryFlow((state) => state.clearSaveError);
 
   const [title, setTitle] = useState(storedTitle);
   const [body, setBody] = useState(storedBody);
   const [tagsInput, setTagsInput] = useState(storedTags.map((tag) => `#${tag}`).join(' '));
 
   if (walk === null) return <Redirect href="/" />;
+  // Declarative post-save navigation + ghost re-edit guard, like the preview.
+  if (experienceId !== null) return <Redirect href="/diary/done" />;
   if (phase !== 'success') return <Redirect href="/diary/generating" />;
 
   const saving = savePhase === 'saving';
   const titleEmpty = title.trim().length === 0;
-
-  const handleSave = async () => {
-    applyEdit({ title, body, tagsInput });
-    if (await save()) router.replace('/diary/done');
-  };
 
   return (
     <SafeAreaView className="flex-1 bg-parchment">
@@ -99,14 +97,17 @@ export default function DiaryEditScreen() {
             className="flex-1"
             disabled={saving}
             label="취소"
-            onPress={() => router.back()}
+            onPress={() => {
+              clearSaveError();
+              router.back();
+            }}
           />
           <View className="w-3" />
           <PrimaryButton
             className="flex-1"
             disabled={saving || titleEmpty}
             label={saving ? '저장 중…' : '변경사항 저장'}
-            onPress={() => void handleSave()}
+            onPress={() => void applyEditAndSave({ title, body, tagsInput })}
           />
         </View>
       </ScrollView>

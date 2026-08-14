@@ -84,15 +84,59 @@ type DiaryFlowState = {
   toggleEmotion(value: Emotion): void;
   setSituation(value: Situation | null): void;
   generate(): Promise<void>;
-  applyEdit(edit: { title: string; body: string; tagsInput: string }): void;
+  /**
+   * Validates the edited values FIRST and commits them to the store only when
+   * they pass — a failed save must not leak half-valid values into the
+   * preview (취소 discards everything, as the edit screen promises).
+   */
+  applyEditAndSave(edit: { title: string; body: string; tagsInput: string }): Promise<boolean>;
   /** Returns true when the experience was created (or already exists). */
   save(): Promise<boolean>;
+  /** 취소 discards a failed edit's error along with its values. */
+  clearSaveError(): void;
   setForceAiFailure(value: boolean): void;
   reset(): void;
 };
 
 /** The mock answers instantly; a loading screen that flashes reads as broken. */
 const MIN_GENERATION_MS = 1200;
+
+/** Space-separated tag field → normalized, deduplicated tag list. */
+function parseTagsInput(tagsInput: string): string[] {
+  const tags = tagsInput
+    .split(/\s+/)
+    .map(normalizeTag)
+    .filter((tag): tag is string => tag !== null);
+  return [...new Set(tags)];
+}
+
+/** Mirrors the server's validation so the user gets a message, not a 400. */
+function validateFinal(title: string, tags: string[]): string | null {
+  const trimmed = title.trim();
+  if (trimmed.length === 0) return '제목을 입력해주세요.';
+  if (trimmed.length > LIMITS.titleMaxLength) {
+    return `제목은 ${LIMITS.titleMaxLength}자 이내여야 해요.`;
+  }
+  if (tags.length > LIMITS.tagsMaxCount) {
+    return `태그는 ${LIMITS.tagsMaxCount}개까지 저장할 수 있어요.`;
+  }
+  return null;
+}
+
+/**
+ * Web object URLs (blob:) hold their image in memory until revoked; iOS file
+ * URIs need no release. Called whenever a photo is replaced or the flow resets.
+ */
+function releasePhotoUri(uri: string | null): void {
+  if (
+    uri !== null &&
+    uri.startsWith('blob:') &&
+    typeof URL !== 'undefined' &&
+    typeof URL.revokeObjectURL === 'function'
+  ) {
+    URL.revokeObjectURL(uri);
+  }
+}
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -155,6 +199,7 @@ export const useDiaryFlow = create<DiaryFlowState>((set, get) => {
       if (get().walk?.candidateId === candidate.candidateId) return; // remount of the same flow
       generateRun += 1;
       syncedInputsKey = null;
+      releasePhotoUri(get().photoUri);
       set({
         ...initial,
         walk: {
@@ -178,6 +223,7 @@ export const useDiaryFlow = create<DiaryFlowState>((set, get) => {
         append('photo library cancelled');
         return;
       }
+      releasePhotoUri(get().photoUri);
       set({ photoUri: picked.value.uri });
     },
 
@@ -191,10 +237,15 @@ export const useDiaryFlow = create<DiaryFlowState>((set, get) => {
         append('camera cancelled');
         return;
       }
+      releasePhotoUri(get().photoUri);
       set({ photoUri: captured.value.uri });
     },
 
-    setPhoto: (uri) => set({ photoUri: uri }),
+    setPhoto: (uri) => {
+      const previous = get().photoUri;
+      if (previous !== uri) releasePhotoUri(previous);
+      set({ photoUri: uri });
+    },
     setCompanion: (value) => set({ companion: value }),
     setSituation: (value) => set({ situation: value }),
 
@@ -301,12 +352,17 @@ export const useDiaryFlow = create<DiaryFlowState>((set, get) => {
       });
     },
 
-    applyEdit: ({ title, body, tagsInput }) => {
-      const tags = tagsInput
-        .split(/\s+/)
-        .map(normalizeTag)
-        .filter((tag): tag is string => tag !== null);
-      set({ title, body, tags: [...new Set(tags)], saveError: null });
+    applyEditAndSave: async ({ title, body, tagsInput }) => {
+      const tags = parseTagsInput(tagsInput);
+      const invalid = validateFinal(title, tags);
+      if (invalid !== null) {
+        // Store untouched: a failed save must not leak these values into the
+        // preview, where 취소 would otherwise show them as if confirmed.
+        set({ saveError: invalid });
+        return false;
+      }
+      set({ title, body, tags, saveError: null });
+      return get().save();
     },
 
     save: async () => {
@@ -318,18 +374,10 @@ export const useDiaryFlow = create<DiaryFlowState>((set, get) => {
         return false;
       }
 
-      // Mirror the server's validation so the user gets a message, not a 400.
       const title = state.title.trim();
-      if (title.length === 0) {
-        set({ saveError: '제목을 입력해주세요.' });
-        return false;
-      }
-      if (title.length > LIMITS.titleMaxLength) {
-        set({ saveError: `제목은 ${LIMITS.titleMaxLength}자 이내여야 해요.` });
-        return false;
-      }
-      if (state.tags.length > LIMITS.tagsMaxCount) {
-        set({ saveError: `태그는 ${LIMITS.tagsMaxCount}개까지 저장할 수 있어요.` });
+      const invalid = validateFinal(title, state.tags);
+      if (invalid !== null) {
+        set({ saveError: invalid });
         return false;
       }
 
@@ -365,6 +413,8 @@ export const useDiaryFlow = create<DiaryFlowState>((set, get) => {
       set({ savePhase: 'saved', experienceId: created.value.experienceId });
       return true;
     },
+
+    clearSaveError: () => set({ saveError: null }),
 
     setForceAiFailure: (value) => {
       append(`forceAiFailure ${value ? 'ON' : 'OFF'} (dev toggle)`);

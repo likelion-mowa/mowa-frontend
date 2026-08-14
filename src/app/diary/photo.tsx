@@ -22,6 +22,7 @@ import { useWalkCandidateFlow } from '@/stores/walk-candidate-store';
 export default function DiaryPhotoScreen() {
   const active = useWalkCandidateFlow((state) => state.activeCandidate);
   const walk = useDiaryFlow((state) => state.walk);
+  const experienceId = useDiaryFlow((state) => state.experienceId);
   const beginFlow = useDiaryFlow((state) => state.beginFlow);
   const photoUri = useDiaryFlow((state) => state.photoUri);
   const setPhoto = useDiaryFlow((state) => state.setPhoto);
@@ -39,6 +40,12 @@ export default function DiaryPhotoScreen() {
   }
   if (walk === null) {
     return <SafeAreaView className="flex-1 bg-parchment" />;
+  }
+  // This flow already produced an experience — re-entering it (swipe-back,
+  // browser back) must not offer edits that save() would silently drop. A
+  // DIFFERENT candidate falls through: the effect above resets the flow.
+  if (experienceId !== null && (active === null || active.candidateId === walk.candidateId)) {
+    return <Redirect href="/diary/done" />;
   }
 
   const sources = [

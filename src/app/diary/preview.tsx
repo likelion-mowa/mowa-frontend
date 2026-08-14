@@ -31,15 +31,17 @@ export default function DiaryPreviewScreen() {
   const tags = useDiaryFlow((state) => state.tags);
   const savePhase = useDiaryFlow((state) => state.savePhase);
   const saveError = useDiaryFlow((state) => state.saveError);
+  const experienceId = useDiaryFlow((state) => state.experienceId);
   const save = useDiaryFlow((state) => state.save);
 
   if (walk === null) return <Redirect href="/" />;
+  // Declarative like walk.tsx: save() flips experienceId, and this redirect is
+  // both the post-save navigation and the guard against ghost re-edits after
+  // completion (swipe-back / browser back).
+  if (experienceId !== null) return <Redirect href="/diary/done" />;
   if (phase !== 'success') return <Redirect href="/diary/generating" />;
 
   const saving = savePhase === 'saving';
-  const handleSave = async () => {
-    if (await save()) router.replace('/diary/done');
-  };
 
   const infoRows: { label: string; value: string }[] = [
     { label: '날짜', value: `${formatKoreanDate(walk.startedAtMs)} · ${formatTime(walk.startedAtMs)}` },
@@ -140,7 +142,7 @@ export default function DiaryPreviewScreen() {
             className="flex-1"
             disabled={saving}
             label={saving ? '저장 중…' : '저장하기'}
-            onPress={() => void handleSave()}
+            onPress={() => void save()}
           />
         </View>
       </ScrollView>

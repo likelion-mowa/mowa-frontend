@@ -5,7 +5,13 @@ import { Redirect } from 'expo-router';
 
 import { PrimaryButton, SecondaryButton } from '@/components/buttons';
 import { IcWalk } from '@/components/icons';
-import { durationMinutes, formatKoreanDate, formatTime } from '@/lib/format';
+import {
+  daypartLabel,
+  durationMinutes,
+  formatKoreanDate,
+  formatTime,
+  relativeLabel,
+} from '@/lib/format';
 import { colors, shadows } from '@/lib/theme';
 import { useWalkCandidateFlow } from '@/stores/walk-candidate-store';
 
@@ -56,6 +62,13 @@ export default function WalkSuggestionScreen() {
 
   const busy = phase !== 'ready';
 
+  // The prototype hardcodes '방금 전' and '오늘 오후' — real taps can be hours
+  // old and morning walks exist, so both derive from the candidate instead.
+  const nowMs = Date.now();
+  const referenceMs = candidate.endedAtMs ?? candidate.startedAtMs;
+  const isToday = new Date(referenceMs).toDateString() === new Date(nowMs).toDateString();
+  const daypart = `${isToday ? '오늘 ' : ''}${daypartLabel(candidate.startedAtMs)}`;
+
   return (
     <SafeAreaView className="flex-1 bg-parchment">
       {/* Notification-style banner, echoing the push the user just tapped. */}
@@ -67,13 +80,15 @@ export default function WalkSuggestionScreen() {
             </View>
             <View className="ml-3 flex-1">
               <Text className="text-xs font-semibold text-ink">Mowa</Text>
-              <Text className="text-[11px] text-ink-subtle">방금 전</Text>
+              <Text className="text-[11px] text-ink-subtle">
+                {relativeLabel(referenceMs, nowMs)}
+              </Text>
             </View>
           </View>
           <View className="px-4 py-3.5">
             <Text className="mb-0.5 text-sm font-semibold text-ink">방금 산책을 마쳤네요 🌿</Text>
             <Text className="text-xs leading-relaxed text-ink-muted">
-              오늘 오후의 산책을 기억으로 남겨볼까요?
+              {daypart}의 산책을 기억으로 남겨볼까요?
             </Text>
           </View>
         </View>

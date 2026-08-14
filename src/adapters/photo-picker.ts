@@ -5,8 +5,10 @@ import { toError, type AdapterResult, type PhotoPickerPort, type PickedPhoto } f
  *
  * Deliberately dependency-free: a DOM `<input type=file>` covers the library
  * case, and the `capture` attribute makes mobile browsers open the camera
- * (desktop browsers ignore it and fall back to the file dialog). Keeping
- * expo-image-picker out of this file keeps it out of the web bundle entirely.
+ * (desktop browsers ignore it and fall back to the file dialog). The Expo
+ * picker package stays confined to the .native file, and out of the web
+ * bundle entirely — its specifier must not appear here even in prose, since
+ * Gate 4 greps the bundle for it.
  *
  * The returned URI is an object URL, alive for this page session only — which
  * matches how far a photo can travel on web anyway (no Object Storage yet).
