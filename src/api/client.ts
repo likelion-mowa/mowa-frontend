@@ -25,6 +25,7 @@ import {
   type UpdateExperienceDraftRequest,
   type UpdateMeRequest,
   type UpdateWalkCandidateRequest,
+  type UpdateWalkExperienceRequest,
   type Uuid,
   type WalkCandidate,
   type WalkExperienceDetail,
@@ -77,6 +78,17 @@ type RequestOptions = {
    * eject the user who is currently typing them.
    */
   public?: boolean;
+  /**
+   * Endpoints the spec gives no response body (기능 8's PATCH and DELETE).
+   *
+   * Two jobs, both load-bearing. First, a backend that answers `204 No Content`
+   * — the natural reading of "no response body" — sends nothing to parse, and
+   * without this flag the envelope check below would report every SUCCESSFUL
+   * save as a failure. Second, whatever a server does choose to send is thrown
+   * away here, so no caller can quietly start depending on it. The mock invents
+   * a body for both endpoints; that invention is not a contract.
+   */
+  bodyless?: boolean;
 };
 
 async function requestJson<T>(
@@ -115,6 +127,13 @@ async function requestJson<T>(
     envelope = (await response.json()) as ApiEnvelope<T>;
   } catch {
     envelope = null;
+  }
+
+  // Before the failure branch on purpose: a 2xx with no envelope is a success
+  // here, not a parse failure. An envelope that explicitly says `success: false`
+  // still falls through and is reported as one.
+  if (response.ok && options?.bodyless === true && (envelope === null || envelope.success)) {
+    return { ok: true, value: null as T };
   }
 
   if (!response.ok || envelope === null || !envelope.success) {
@@ -220,6 +239,37 @@ export const api = {
   /** Detail (기능 7). Missing, deleted and foreign experiences are all 404. */
   getWalkExperience(experienceId: Uuid): Promise<ApiResult<WalkExperienceDetail>> {
     return requestJson<WalkExperienceDetail>('GET', endpoints.walkExperience(experienceId));
+  },
+
+  /**
+   * Edit (기능 8). Send only the fields that changed: an omitted key means
+   * "keep", and `emotions`/`tags` replace wholesale rather than merging.
+   * `startedAt`, `endedAt`, `durationSeconds` and `locationSummary` are outside
+   * the MVP edit scope and are absent from the request type by design — the
+   * server rejects them with a 400.
+   *
+   * `ApiResult<null>` is the type-level statement that this endpoint has no
+   * contracted response body. Callers derive the new record from the patch they
+   * sent (see `buildExperiencePatch`), never from what came back.
+   */
+  updateWalkExperience(
+    experienceId: Uuid,
+    body: UpdateWalkExperienceRequest,
+  ): Promise<ApiResult<null>> {
+    return requestJson<null>('PATCH', endpoints.walkExperience(experienceId), body, {
+      bodyless: true,
+    });
+  },
+
+  /**
+   * Delete (기능 8). Soft delete — the row keeps existing with `deletedAt` set,
+   * so a second call is a 404, exactly like a record that was never there.
+   * Callers treat that 404 as success: the intent is already satisfied.
+   */
+  deleteWalkExperience(experienceId: Uuid): Promise<ApiResult<null>> {
+    return requestJson<null>('DELETE', endpoints.walkExperience(experienceId), undefined, {
+      bodyless: true,
+    });
   },
 
   /**
