@@ -117,3 +117,54 @@ export function IcClose({ size = 16, color = colors.ink }: IconProps) {
     </Svg>
   );
 }
+
+export function IcUser({ size = 22, color = colors.ink }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" {...strokeProps(color)}>
+      <Path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+      <Circle cx={12} cy={7} r={4} />
+    </Svg>
+  );
+}
+
+export function IcDocument({ size = 22, color = colors.ink }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" {...strokeProps(color)}>
+      <Path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+      <Polyline points="14 2 14 8 20 8" />
+      <Line x1={9} y1={13} x2={15} y2={13} />
+      <Line x1={9} y1={17} x2={13} y2={17} />
+    </Svg>
+  );
+}
+
+export function IcHome({ size = 22, color = colors.ink }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" {...strokeProps(color)}>
+      <Path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+      <Polyline points="9 22 9 12 15 12 15 22" />
+    </Svg>
+  );
+}
+
+export function IcGrid({ size = 18, color = colors.ink }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" {...strokeProps(color, 2)}>
+      <Rect x={3} y={3} width={7} height={7} />
+      <Rect x={14} y={3} width={7} height={7} />
+      <Rect x={3} y={14} width={7} height={7} />
+      <Rect x={14} y={14} width={7} height={7} />
+    </Svg>
+  );
+}
+
+export function IcCalendar({ size = 18, color = colors.ink }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" {...strokeProps(color, 2)}>
+      <Rect x={3} y={4} width={18} height={18} rx={2} />
+      <Line x1={16} y1={2} x2={16} y2={6} />
+      <Line x1={8} y1={2} x2={8} y2={6} />
+      <Line x1={3} y1={10} x2={21} y2={10} />
+    </Svg>
+  );
+}
