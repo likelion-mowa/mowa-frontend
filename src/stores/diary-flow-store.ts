@@ -3,7 +3,6 @@ import { create } from 'zustand';
 import { photoPicker } from '@/adapters';
 import { api, hasAccessToken } from '@/api/client';
 import {
-  LIMITS,
   normalizeTag,
   type Companion,
   type CreateExperienceDraftRequest,
@@ -12,6 +11,11 @@ import {
   type Situation,
   type UpdateExperienceDraftRequest,
 } from '@/api/types';
+import {
+  parseTagsInput,
+  releasePhotoUri,
+  validateTitleAndTags,
+} from '@/lib/experience-input';
 import type { ActiveCandidate } from '@/stores/walk-candidate-store';
 
 /**
@@ -100,43 +104,6 @@ type DiaryFlowState = {
 
 /** The mock answers instantly; a loading screen that flashes reads as broken. */
 const MIN_GENERATION_MS = 1200;
-
-/** Space-separated tag field → normalized, deduplicated tag list. */
-function parseTagsInput(tagsInput: string): string[] {
-  const tags = tagsInput
-    .split(/\s+/)
-    .map(normalizeTag)
-    .filter((tag): tag is string => tag !== null);
-  return [...new Set(tags)];
-}
-
-/** Mirrors the server's validation so the user gets a message, not a 400. */
-function validateFinal(title: string, tags: string[]): string | null {
-  const trimmed = title.trim();
-  if (trimmed.length === 0) return '제목을 입력해주세요.';
-  if (trimmed.length > LIMITS.titleMaxLength) {
-    return `제목은 ${LIMITS.titleMaxLength}자 이내여야 해요.`;
-  }
-  if (tags.length > LIMITS.tagsMaxCount) {
-    return `태그는 ${LIMITS.tagsMaxCount}개까지 저장할 수 있어요.`;
-  }
-  return null;
-}
-
-/**
- * Web object URLs (blob:) hold their image in memory until revoked; iOS file
- * URIs need no release. Called whenever a photo is replaced or the flow resets.
- */
-function releasePhotoUri(uri: string | null): void {
-  if (
-    uri !== null &&
-    uri.startsWith('blob:') &&
-    typeof URL !== 'undefined' &&
-    typeof URL.revokeObjectURL === 'function'
-  ) {
-    URL.revokeObjectURL(uri);
-  }
-}
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -349,7 +316,7 @@ export const useDiaryFlow = create<DiaryFlowState>((set, get) => {
 
     applyEditAndSave: async ({ title, body, tagsInput }) => {
       const tags = parseTagsInput(tagsInput);
-      const invalid = validateFinal(title, tags);
+      const invalid = validateTitleAndTags(title, tags);
       if (invalid !== null) {
         // Store untouched: a failed save must not leak these values into the
         // preview, where 취소 would otherwise show them as if confirmed.
@@ -370,7 +337,7 @@ export const useDiaryFlow = create<DiaryFlowState>((set, get) => {
       }
 
       const title = state.title.trim();
-      const invalid = validateFinal(title, state.tags);
+      const invalid = validateTitleAndTags(title, state.tags);
       if (invalid !== null) {
         set({ saveError: invalid });
         return false;

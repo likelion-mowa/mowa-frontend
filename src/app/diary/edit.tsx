@@ -6,6 +6,7 @@ import { Redirect, router } from 'expo-router';
 import { LIMITS } from '@/api/types';
 import { PrimaryButton, SecondaryButton } from '@/components/buttons';
 import { ScreenHeader } from '@/components/screen-header';
+import { formatTagsInput } from '@/lib/experience-input';
 import { colors } from '@/lib/theme';
 import { useDiaryFlow } from '@/stores/diary-flow-store';
 
@@ -31,7 +32,7 @@ export default function DiaryEditScreen() {
 
   const [title, setTitle] = useState(storedTitle);
   const [body, setBody] = useState(storedBody);
-  const [tagsInput, setTagsInput] = useState(storedTags.map((tag) => `#${tag}`).join(' '));
+  const [tagsInput, setTagsInput] = useState(() => formatTagsInput(storedTags));
 
   if (walk === null) return <Redirect href="/" />;
   // Declarative post-save navigation + ghost re-edit guard, like the preview.
