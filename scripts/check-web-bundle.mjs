@@ -59,6 +59,13 @@ const MUST_BE_PRESENT = [
   ['home subtitle', '당신의 산책을 모와드릴까요?'],
   ['archive subtitle', '산책 기억 모음'],
   ['archive empty state', '산책 기록이 없어요'],
+  // 기능 7·8 on /experiences/[experienceId]. The detail screen never had a
+  // control; the sheet's headline is unique to the new module. The EDITOR has
+  // none on purpose — every string in it is reused from the diary flow, so no
+  // grep can distinguish it. It is a static import of this route, which makes
+  // Gate 1 and Gate 3 its real guards.
+  ['experience detail not-found', '삭제되었거나 존재하지 않는 기록이에요.'],
+  ['delete sheet headline', '이 기록을 삭제할까요?'],
   // Auth + settings screens. One unique headline each, so a screen whose
   // import graph broke is caught here rather than at runtime.
   ['onboarding signature', '기록이 쌓이면, 기억이 됩니다.'],
