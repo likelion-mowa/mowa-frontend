@@ -1,44 +1,29 @@
 import { useEffect, useRef } from 'react';
-import { Pressable, Text, View } from 'react-native';
+import { Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Redirect } from 'expo-router';
 
+import { PrimaryButton, SecondaryButton } from '@/components/buttons';
+import { IcWalk } from '@/components/icons';
+import { durationMinutes, formatKoreanDate, formatTime } from '@/lib/format';
+import { colors } from '@/lib/theme';
 import { useWalkCandidateFlow } from '@/stores/walk-candidate-store';
 
 /**
  * 기록 제안 화면. Entered by tapping the walk notification (routing lives in
  * _layout.tsx), which is the user flow's "기록 작성 희망 여부" decision point:
- * 남기기 → RECORDING, 건너뛰기 → SKIPPED.
+ * 저장할게요 → RECORDING, 괜찮아요 → SKIPPED.
  *
- * Copy is deliberately thin. The spec names exactly two strings for this
- * screen — `남기기` and `건너뛰기` (api-spec.md 기능 1) — and the headline is the
- * notification title the app already ships. The row labels are the spec's own
- * field vocabulary (시작·종료 시각, 지속 시간). Nothing else is invented here;
- * failures go to the flow log, not to made-up on-screen wording.
+ * Layout and copy follow the prototype's NotificationScreen
+ * (Walklog Mobile App MVP src/App.tsx). The button labels replaced the spec's
+ * 남기기/건너뛰기 — a team-owned copy decision recorded in the PR. The brand
+ * line says Mowa, not the prototype's "Walklog" (the prototype is internally
+ * inconsistent; every other screen says MOWA).
  *
  * Screens never touch adapters or the api client: everything comes from the
- * store.
+ * store. 저장할게요 leads into the diary flow (/diary/photo); everything else
+ * still ends at home.
  */
-
-function Row({ label, value }: { label: string; value: string }) {
-  return (
-    <View className="flex-row items-center justify-between border-b border-neutral-100 py-3">
-      <Text className="text-sm text-neutral-500">{label}</Text>
-      <Text className="ml-3 flex-shrink text-right text-base text-neutral-900">{value}</Text>
-    </View>
-  );
-}
-
-function formatTime(epochMs: number | null): string {
-  if (epochMs === null) return '—';
-  return new Date(epochMs).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
-}
-
-function formatDuration(seconds: number | null): string {
-  if (seconds === null) return '—';
-  return `${Math.max(1, Math.round(seconds / 60))}분`;
-}
-
 export default function WalkSuggestionScreen() {
   const phase = useWalkCandidateFlow((state) => state.suggestionPhase);
   const candidate = useWalkCandidateFlow((state) => state.activeCandidate);
@@ -57,45 +42,85 @@ export default function WalkSuggestionScreen() {
     void openSuggestion();
   }, [openSuggestion]);
 
-  // Declarative, so a redirect cannot race the navigator's readiness: nothing
-  // is left to act on, and the home screen is where the flow ends.
+  // Declarative, so a redirect cannot race the navigator's readiness. 저장할게요
+  // continues into the diary flow; a skip or a stale tap ends at home.
   if (opened.current && (phase === 'missing' || phase === 'done')) {
-    return <Redirect href="/" />;
+    return (
+      <Redirect href={candidate?.serverStatus === 'RECORDING' ? '/diary/photo' : '/'} />
+    );
   }
 
   if (!opened.current || candidate === null || phase === 'idle' || phase === 'loading') {
-    return <SafeAreaView className="flex-1 bg-walk-soft" />;
+    return <SafeAreaView className="flex-1 bg-parchment" />;
   }
 
   const busy = phase !== 'ready';
 
   return (
-    <SafeAreaView className="flex-1 bg-walk-soft">
-      <View className="flex-1 justify-center px-6">
-        <View className="rounded-2xl bg-white p-6">
-          <Text className="text-2xl font-bold text-neutral-900">걷기가 감지되었습니다</Text>
+    <SafeAreaView className="flex-1 bg-parchment">
+      {/* Notification-style banner, echoing the push the user just tapped. */}
+      <View className="px-4 pt-2">
+        <View className="overflow-hidden rounded-2xl border border-line bg-white">
+          <View className="flex-row items-center border-b border-line px-4 py-3">
+            <View className="h-8 w-8 items-center justify-center rounded-xl bg-sage">
+              <IcWalk size={16} color={colors.white} />
+            </View>
+            <View className="ml-3 flex-1">
+              <Text className="text-xs font-semibold text-ink">Mowa</Text>
+              <Text className="text-[11px] text-ink-subtle">방금 전</Text>
+            </View>
+          </View>
+          <View className="px-4 py-3.5">
+            <Text className="mb-0.5 text-sm font-semibold text-ink">방금 산책을 마쳤네요 🌿</Text>
+            <Text className="text-xs leading-relaxed text-ink-muted">
+              오늘 오후의 산책을 기억으로 남겨볼까요?
+            </Text>
+          </View>
+        </View>
+      </View>
 
-          <View className="mt-4">
-            <Row label="시작 시각" value={formatTime(candidate.startedAtMs)} />
-            <Row label="종료 시각" value={formatTime(candidate.endedAtMs)} />
-            <Row label="지속 시간" value={formatDuration(candidate.durationSeconds)} />
+      <View className="flex-1 px-4 py-2">
+        <View className="rounded-2xl border border-line bg-white p-5">
+          <Text className="mb-2 text-lg font-bold leading-snug text-ink">
+            이 산책을 기억으로{'\n'}남겨볼까요?
+          </Text>
+          <Text className="mb-5 text-sm leading-relaxed text-ink-muted">
+            지금 저장하지 않으면 기록이 남지 않아요. 1분이면 충분해요.
+          </Text>
+
+          <View className="mb-5 flex-row items-center rounded-xl bg-parchment p-4">
+            <View className="w-14 flex-shrink-0 items-center">
+              <Text className="text-2xl font-bold leading-none text-sage">
+                {durationMinutes(candidate.durationSeconds)}
+              </Text>
+              <Text className="mt-0.5 text-xs text-ink-muted">분</Text>
+            </View>
+            <View className="mx-4 w-px self-stretch bg-line" />
+            <View className="flex-1">
+              <Text className="text-sm font-medium text-ink">
+                {formatTime(candidate.startedAtMs)}
+              </Text>
+              <Text className="mt-0.5 text-xs text-ink-subtle">
+                {formatKoreanDate(candidate.startedAtMs)}
+              </Text>
+            </View>
           </View>
 
-          <Pressable
-            accessibilityRole="button"
-            disabled={busy}
-            onPress={() => void chooseKeep()}
-            className={`mt-8 rounded-xl bg-walk px-4 py-4 active:opacity-70 ${busy ? 'opacity-50' : ''}`}>
-            <Text className="text-center text-base font-semibold text-white">남기기</Text>
-          </Pressable>
-
-          <Pressable
-            accessibilityRole="button"
-            disabled={busy}
-            onPress={() => void chooseSkip()}
-            className={`mt-3 rounded-xl bg-neutral-200 px-4 py-4 active:opacity-70 ${busy ? 'opacity-50' : ''}`}>
-            <Text className="text-center text-base font-semibold text-neutral-600">건너뛰기</Text>
-          </Pressable>
+          <View className="flex-row">
+            <PrimaryButton
+              className="flex-1"
+              disabled={busy}
+              label="저장할게요"
+              onPress={() => void chooseKeep()}
+            />
+            <View className="w-3" />
+            <SecondaryButton
+              className="flex-1"
+              disabled={busy}
+              label="괜찮아요"
+              onPress={() => void chooseSkip()}
+            />
+          </View>
         </View>
       </View>
     </SafeAreaView>
