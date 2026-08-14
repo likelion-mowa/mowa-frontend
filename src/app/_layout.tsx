@@ -9,6 +9,7 @@ import '../../global.css';
 
 import { notifications, type NotificationTapData } from '@/adapters';
 import { useAuth } from '@/stores/auth-store';
+import { useDetection } from '@/stores/detection-store';
 import { useWalkCandidateFlow } from '@/stores/walk-candidate-store';
 
 /**
@@ -130,7 +131,12 @@ export default function RootLayout() {
   // subscription is a no-op by design.
   useEffect(() => {
     if (!signedIn) return;
-    return useWalkCandidateFlow.getState().startCandidateFlow();
+    const unsubscribe = useWalkCandidateFlow.getState().startCandidateFlow();
+    // Reconciles the stored detection preference against what the detector is
+    // actually doing. Here because this is the only place that knows the app
+    // just booted, and it must not run before there is a session.
+    void useDetection.getState().load();
+    return unsubscribe;
   }, [signedIn]);
 
   return (
