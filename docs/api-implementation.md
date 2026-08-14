@@ -5,7 +5,7 @@
 > 명세 원본: `docs/backend/api-spec.md` (최종 MVP API 14개). 계약 타입·경로 상수는
 > `src/api/types.ts`, HTTP 클라이언트는 `src/api/client.ts`.
 
-기준 시점: 일기 플로우 `feature/diary-flow` (2026-08-14).
+기준 시점: 아카이브·홈 `feature/archive-home` (2026-08-14).
 
 ## 범례
 
@@ -18,7 +18,7 @@
 | # | 기능 | Method | Path | 상태 | 구현 위치 / 비고 |
 | --- | --- | --- | --- | --- | --- |
 | 1 | 로그인 (기능 13) | POST | `/auth/login` | ✅ | `client.ts` `login`. `walk-candidate-store`가 `EXPO_PUBLIC_MOCK_LOGIN_ID/PASSWORD` 있을 때 dev 자동 로그인, /debug에 수동 버튼. 로그인 화면 UI는 별도 태스크(팀 소유) |
-| 2 | 내 정보 조회 (기능 13) | GET | `/users/me` | ⬜ | 마이페이지 단계에서 |
+| 2 | 내 정보 조회 (기능 13) | GET | `/users/me` | ✅ | `client.ts` `getMe`. `profile-store`가 기록장 헤더의 "OO님의 기록장"에 쓸 닉네임만 읽는다. 실패해도 오류 화면 없이 "나의 기록장"으로 폴백 |
 | 3 | 내 정보 수정 (기능 13) | PATCH | `/users/me` | ⬜ | 〃 (닉네임만) |
 | 4 | 산책 후보 생성 (기능 1) | POST | `/walk-candidates` | ✅ | `client.ts` `createWalkCandidate`. 감지 플로우(`walk-candidate-store`)가 WalkEvent 수신 시 호출. 감지기가 **산책 종료를 판정한 뒤** 1회 발화하므로 POST 시점도 산책 종료 직후이고, 받은 candidateId를 SQLite `walks.candidateId`에 스탬핑. POST 실패 시에도 감지는 candidateId=null로 로컬 보존 |
 | 5 | 산책 후보 조회 (기능 1) | GET | `/walk-candidates/{candidateId}` | ✅ | `client.ts` `getWalkCandidate`. `/walk` 진입 시 서버 상태를 재확인해 스테일 탭(이미 `RECORDING`/`SKIPPED`)을 판별하고 홈으로 되돌린다. 목록 API가 없어 서버 상태를 아는 유일한 경로 |
@@ -27,7 +27,7 @@
 | 8 | 경험 초안 수정 (기능 2·3) | PATCH | `/experience-drafts/{draftId}` | ✅ | `client.ts` `updateExperienceDraft`. FAILED 재시도 전에 입력이 바뀐 경우에만 전체 현재값으로 호출 (emotions[] 전체 교체, null=제거) |
 | 9 | AI 일기 생성 (기능 4) | POST | `/experience-drafts/{draftId}/ai-generation` | ✅ | `client.ts` `generateAiDiary`. 본문 없는 POST. FAILED → 같은 호출로 수동 재시도. `/debug` 강제 실패 토글만 mock의 `?fail=1`을 붙인다 (dev 전용) |
 | 10 | 경험 확정 (기능 5) | POST | `/walk-experiences` | ✅ | `client.ts` `createWalkExperience`. 미리보기·수정 화면의 저장이 사용자 확정값(제목·본문·태그·감정 등)을 스냅샷으로 전송. SUCCESS 후의 입력 수정도 이 POST에 실린다 (draft는 SUCCESS에서 불변) |
-| 11 | 아카이브 목록 (기능 6·12) | GET | `/walk-experiences` | ⬜ | from/to/tag 조합 규칙은 `types.ts` `isValidListQuery`에 선반영 |
+| 11 | 아카이브 목록 (기능 6·12) | GET | `/walk-experiences` | ✅ | `client.ts` `listWalkExperiences(query)` — from/to/tag 전부 구현, 호출 전 `isValidListQuery`로 잘못된 조합을 왕복 없이 400 처리. 앱은 **쿼리 없이 전체 조회**만 사용하고 기간 탭은 클라이언트에서 KST로 거른다 (아래 공백 8 옆 처분). 호출자는 `experience-store.loadList`, 화면은 `/`(홈 스트립)·`/archive` |
 | 12 | 상세 조회 (기능 7) | GET | `/walk-experiences/{experienceId}` | ✅ | `client.ts` `getWalkExperience`. `/experiences/[experienceId]` 상세 화면 (`experience-store`). 일기 플로우 완료가 여기로 랜딩 |
 | 13 | 경험 수정 (기능 8) | PATCH | `/walk-experiences/{experienceId}` | ⬜ | title은 비울 수 없음. emotions/tags 전체 교체 |
 | 14 | 경험 삭제 (기능 8) | DELETE | `/walk-experiences/{experienceId}` | ⬜ | Soft delete. 같은 Draft로 재생성 불가 |
@@ -85,6 +85,24 @@
    → **처분: Notion 원본 수정 대상.** 기능 9 "Android / Web 배포 정책" 절
    (api-spec.md 903~925행)과 "기술 구현 단계에서 결정할 사항" 표의 "Android
    플러그인" 행(1320행)을 iOS 기준으로 고친다. API 계약 영향 없음.
+8. **목록 응답에 `durationSeconds`가 없다** (2026-08-14 확인). 기능 6 응답은 9개
+   필드뿐이라 기록장 헤더의 "누적 시간"과 캘린더 날짜 칸의 분 표기를 계산할 수
+   없다. 상세를 행 수만큼 조회해 합산하는 것은 왕복 비용이 커 채택하지 않았다.
+   → **처분: 백엔드에 필드 추가 요청.** 그때까지 누적 시간은 `—`로 표시한다.
+   `types.ts`의 `WalkExperienceListItem.durationSeconds`는 **선택 필드**로 선반영돼
+   있고, 모든 행이 값을 가질 때만 합산하므로 백엔드가 내려주는 순간 자동으로 켜진다.
+   mock은 기본적으로 명세 그대로(필드 없음) 응답하며, 합산 로직 검증용으로
+   `MOCK_LIST_DURATION=1` 스위치를 둔다.
+
+## 목록 필터 처분 (2026-08-14)
+
+앱은 기간 탭(년/월/전체)을 **서버 쿼리가 아니라 클라이언트 필터**로 구현한다.
+근거: MVP에 페이지네이션이 없고, 통계·홈 스트립·캘린더가 어차피 전체 목록을 필요로
+하므로 필터용 재요청은 같은 결과를 얻는 중복 왕복이며 실패 경로만 하나 늘린다.
+경계는 서버와 같은 Asia/Seoul 기준(`src/lib/kst.ts`)이라 결과가 일치한다.
+기능 12의 년/월/일 → `from`/`to` 변환은 `kst.ts`에 실물로 있고, 서버 쿼리 경로는
+`/debug` 섹션 8에서 직접 호출해 검증한다. 서버가 페이지네이션을 도입하면 화면이
+`loadList`에 쿼리를 넘기도록 바꾼다.
 
 ## 갱신 규칙
 

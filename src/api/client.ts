@@ -10,6 +10,7 @@
  */
 import {
   endpoints,
+  isValidListQuery,
   type AiGenerationResponse,
   type ApiEnvelope,
   type CreateExperienceDraftRequest,
@@ -17,13 +18,16 @@ import {
   type CreateWalkExperienceRequest,
   type CreateWalkExperienceResponse,
   type ExperienceDraft,
+  type ListWalkExperiencesQuery,
   type LoginRequest,
   type LoginResponse,
+  type MeResponse,
   type UpdateExperienceDraftRequest,
   type UpdateWalkCandidateRequest,
   type Uuid,
   type WalkCandidate,
   type WalkExperienceDetail,
+  type WalkExperienceListItem,
 } from './types';
 
 /**
@@ -175,5 +179,41 @@ export const api = {
   /** Detail (기능 7). Missing, deleted and foreign experiences are all 404. */
   getWalkExperience(experienceId: Uuid): Promise<ApiResult<WalkExperienceDetail>> {
     return requestJson<WalkExperienceDetail>('GET', endpoints.walkExperience(experienceId));
+  },
+
+  /**
+   * Archive list (기능 6·12). Server-sorted `startedAt` DESC, no pagination in
+   * the MVP.
+   *
+   * The spec rejects `from` without `to`, a reversed range, and any mix of a
+   * range with a tag — all four are 400s. `isValidListQuery` mirrors those
+   * rules, so an invalid combination fails here instead of costing a round
+   * trip. The failure is shaped like a server 400 on purpose: callers already
+   * branch on status.
+   */
+  listWalkExperiences(
+    query: ListWalkExperiencesQuery = {},
+  ): Promise<ApiResult<WalkExperienceListItem[]>> {
+    if (!isValidListQuery(query)) {
+      return Promise.resolve({
+        ok: false,
+        status: 400,
+        error: 'from과 to는 함께 전달해야 하고, 기간과 tag는 함께 사용할 수 없습니다.',
+      });
+    }
+
+    // requestJson takes a path, so the querystring is the caller's job.
+    // encodeURIComponent matters: tags are Korean.
+    const params = Object.entries(query)
+      .filter((entry): entry is [string, string] => entry[1] != null)
+      .map(([key, value]) => `${key}=${encodeURIComponent(value)}`);
+    const suffix = params.length === 0 ? '' : `?${params.join('&')}`;
+
+    return requestJson<WalkExperienceListItem[]>('GET', `${endpoints.walkExperiences()}${suffix}`);
+  },
+
+  /** Profile (기능 4) — the archive header greets the user by nickname. */
+  getMe(): Promise<ApiResult<MeResponse>> {
+    return requestJson<MeResponse>('GET', endpoints.me());
   },
 };

@@ -1,4 +1,4 @@
-import { useCallback, useEffect } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Platform, Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Link } from 'expo-router';
@@ -19,9 +19,12 @@ import {
   SITUATION_LABELS,
   SITUATIONS,
   endpoints,
+  type ListWalkExperiencesQuery,
 } from '@/api/types';
+import { kstMonthRange, kstNow, kstYearRange } from '@/lib/kst';
 import { useDiagnostics } from '@/stores/diagnostics-store';
 import { useDiaryFlow } from '@/stores/diary-flow-store';
+import { useExperiences } from '@/stores/experience-store';
 import { useWalkCandidateFlow } from '@/stores/walk-candidate-store';
 
 /**
@@ -76,6 +79,17 @@ export default function SmokeScreen() {
   const { append, set } = state;
   const flow = useWalkCandidateFlow();
   const diary = useDiaryFlow();
+  const experiences = useExperiences();
+  const [probeLines, setProbeLines] = useState<string[]>([]);
+
+  const runProbe = async (query: ListWalkExperiencesQuery) => {
+    const result = await experiences.probeListQuery(query);
+    const outcome =
+      result.error === null
+        ? `200 · ${result.count}건`
+        : `${result.status ?? 'network'} · ${result.error}`;
+    setProbeLines((lines) => [`${JSON.stringify(query)} → ${outcome}`, ...lines].slice(0, 12));
+  };
 
   /** Unwraps an AdapterResult into the log, returning the value on success. */
   const run = useCallback(
@@ -509,6 +523,65 @@ export default function SmokeScreen() {
             generation is deterministic and instant. Product code never sets it.
           </Text>
           {diary.log.map((line, i) => (
+            <Text key={i} className="font-mono text-xs text-neutral-700">
+              {line}
+            </Text>
+          ))}
+        </Section>
+
+        <Section title="8 · Archive list (GET /walk-experiences)">
+          <Row label="list phase" value={experiences.listPhase} />
+          <Row label="rows" value={String(experiences.items.length)} />
+          <Row
+            label="durationSeconds"
+            value={
+              experiences.items.length === 0
+                ? '—'
+                : experiences.items.every((item) => item.durationSeconds != null)
+                  ? '제공됨'
+                  : '미제공 (누적 시간 —)'
+            }
+          />
+          <Button title="Load list (no query)" onPress={() => void experiences.loadList()} />
+          <Button
+            title="Probe: this month (from/to)"
+            onPress={() => {
+              const now = kstNow(Date.now());
+              void runProbe(kstMonthRange(now.year, now.month));
+            }}
+          />
+          <Button
+            title="Probe: this year (from/to)"
+            onPress={() => void runProbe(kstYearRange(kstNow(Date.now()).year))}
+          />
+          <Button
+            title="Probe: first tag of first row"
+            onPress={() => {
+              const tag = experiences.items[0]?.tags[0];
+              if (tag === undefined) {
+                setProbeLines((lines) => ['태그가 있는 행이 없습니다 — 먼저 목록을 불러오세요', ...lines]);
+                return;
+              }
+              void runProbe({ tag });
+            }}
+          />
+          <Button
+            title="Guard: from only (no round trip)"
+            onPress={() => void runProbe({ from: '2026-08-01' })}
+          />
+          <Button
+            title="Guard: range + tag (no round trip)"
+            onPress={() => void runProbe({ from: '2026-08-01', to: '2026-08-31', tag: '망원동' })}
+          />
+          <Text className="mt-2 text-xs text-neutral-500">
+            The archive filters its period tabs in memory — the MVP has no pagination and
+            the stats need every row anyway — so this section is where the endpoint&apos;s
+            from/to/tag parameters actually run. The two Guard buttons never reach the
+            server: `isValidListQuery` rejects them client-side, which is why they report
+            400 instantly. The server&apos;s own four 400s are covered by
+            `npm run mock:test`.
+          </Text>
+          {probeLines.map((line, i) => (
             <Text key={i} className="font-mono text-xs text-neutral-700">
               {line}
             </Text>
