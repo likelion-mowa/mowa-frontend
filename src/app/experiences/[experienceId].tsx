@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { ActivityIndicator, Image, Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -10,7 +10,16 @@ import {
   fromIsoDateTime,
 } from '@/api/types';
 import { PrimaryButton } from '@/components/buttons';
-import { IcChevronLeft, IcClock, IcImage, IcLocation } from '@/components/icons';
+import { ConfirmDeleteSheet } from '@/components/confirm-delete-sheet';
+import { ExperienceEditor } from '@/components/experience-editor';
+import {
+  IcChevronLeft,
+  IcClock,
+  IcEdit,
+  IcImage,
+  IcLocation,
+  IcTrash,
+} from '@/components/icons';
 import { ScreenHeader } from '@/components/screen-header';
 import { formatDurationMinutes, formatKoreanDate, formatTime } from '@/lib/format';
 import { colors } from '@/lib/theme';
@@ -18,17 +27,20 @@ import { useAuth } from '@/stores/auth-store';
 import { useExperiences } from '@/stores/experience-store';
 
 /**
- * 산책 상세 (기능 7, prototype DetailScreen). Renders the server's snapshot —
- * by spec the detail never depends on the draft or candidate.
+ * 산책 상세 (기능 7, prototype DetailScreen) plus 수정·삭제 (기능 8). Renders
+ * the server's snapshot — by spec the detail never depends on the draft or
+ * candidate.
  *
- * The prototype's edit/delete header icons are omitted: 기능 8 (수정·삭제) is a
- * later task and dead buttons would be worse than none — flagged for team
- * review in the PR.
+ * Editing happens in place: the 수정 button swaps this screen's body for
+ * `ExperienceEditor` on the SAME route. The prototype's edit icon leads
+ * nowhere (it has no handler), so the form itself is assembled from the diary
+ * flow's shipped screens rather than invented. Deleting opens the prototype's
+ * own bottom sheet, ported 1:1.
  *
  * Back is driven by a `from` param, mirroring the prototype's `fromArchive`
  * flag. `router.canGoBack()` cannot decide it: the diary flow pushes its own
  * screens and then replaces into this one, so a stack entry exists but leads
- * back into a finished flow.
+ * back into a finished flow. Deleting reuses that same exit.
  */
 
 function Badge({ label, tone }: { label: string; tone: 'green' | 'neutral' }) {
@@ -44,13 +56,66 @@ function Badge({ label, tone }: { label: string; tone: 'green' | 'neutral' }) {
   );
 }
 
+/**
+ * 수정·삭제, in the prototype's own arrangement: back on the left, these two on
+ * the trailing edge, with the trash slightly dimmer than the pencil.
+ *
+ * Over a photo they take the same translucent pill the back chevron already
+ * wears here — white icons are illegible on a bright photo, which is why that
+ * pill exists, and the same is true of these.
+ */
+function DetailActions({
+  overPhoto,
+  onEdit,
+  onDelete,
+}: {
+  overPhoto: boolean;
+  onEdit: () => void;
+  onDelete: () => void;
+}) {
+  const tint = overPhoto ? colors.white : colors.inkMuted;
+  const chrome = overPhoto ? 'rounded-full bg-black/30 p-2' : 'p-2';
+  return (
+    <View className="flex-row items-center">
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="수정"
+        onPress={onEdit}
+        hitSlop={8}
+        className={`mr-2 active:opacity-70 ${chrome}`}>
+        <IcEdit size={18} color={tint} />
+      </Pressable>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="삭제"
+        onPress={onDelete}
+        hitSlop={8}
+        className={`active:opacity-70 ${chrome} ${overPhoto ? 'opacity-80' : ''}`}>
+        <IcTrash size={18} color={tint} />
+      </Pressable>
+    </View>
+  );
+}
+
 export default function ExperienceDetailScreen() {
   const { experienceId, from } = useLocalSearchParams<{ experienceId: string; from?: string }>();
   const phase = useExperiences((state) => state.phase);
   const loadedId = useExperiences((state) => state.experienceId);
   const detail = useExperiences((state) => state.detail);
   const loadExperience = useExperiences((state) => state.loadExperience);
+  const editPhase = useExperiences((state) => state.editPhase);
+  const editError = useExperiences((state) => state.editError);
+  const deletePhase = useExperiences((state) => state.deletePhase);
+  const deleteError = useExperiences((state) => state.deleteError);
+  const updateExperience = useExperiences((state) => state.updateExperience);
+  const deleteExperience = useExperiences((state) => state.deleteExperience);
+  const clearWriteErrors = useExperiences((state) => state.clearWriteErrors);
   const signedIn = useAuth((state) => state.status === 'signed-in');
+
+  // Mode lives here, the draft lives in the editor, the request lives in the
+  // store — the same split as the nickname field in /settings.
+  const [editing, setEditing] = useState(false);
+  const [confirming, setConfirming] = useState(false);
 
   // Gated on the session for the same reason as the list screens: a reload of
   // this URL mounts before the token has been restored.
@@ -98,100 +163,160 @@ export default function ExperienceDetailScreen() {
     );
   }
 
+  // After the phase guards on purpose: a 404 arriving mid-edit tears the editor
+  // down rather than leaving the user typing into a record that no longer exists.
+  if (editing) {
+    return (
+      <ExperienceEditor
+        detail={detail}
+        saving={editPhase === 'saving'}
+        error={editError}
+        onCancel={() => {
+          clearWriteErrors();
+          setEditing(false);
+        }}
+        onSave={(draft) => {
+          void updateExperience(detail.experienceId, draft).then((saved) => {
+            if (saved) setEditing(false);
+          });
+        }}
+      />
+    );
+  }
+
   const startedAtMs = fromIsoDateTime(detail.startedAt);
   const startedDate = new Date(startedAtMs);
   const day = startedDate.getDate();
   const yearMonth = `${startedDate.getFullYear()} · ${startedDate.getMonth() + 1}월`;
 
+  const actions = (
+    <DetailActions
+      overPhoto={detail.photoUrl !== null}
+      onEdit={() => {
+        clearWriteErrors();
+        setEditing(true);
+      }}
+      onDelete={() => {
+        clearWriteErrors();
+        setConfirming(true);
+      }}
+    />
+  );
+
   return (
-    <SafeAreaView className="flex-1 bg-white">
-      {detail.photoUrl !== null ? (
-        <View className="h-72 w-full">
-          <Image
-            source={{ uri: detail.photoUrl }}
-            className="h-full w-full"
-            resizeMode="cover"
-            accessibilityLabel={detail.title}
-          />
-          <View className="absolute left-0 right-0 top-0 flex-row items-center px-3 py-1">
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="뒤로"
-              onPress={goBack}
-              className="rounded-full bg-black/30 p-2 active:opacity-70"
-              hitSlop={8}>
-              <IcChevronLeft size={22} color={colors.white} />
-            </Pressable>
-          </View>
-          <View className="absolute bottom-5 left-5">
-            <Text className="mb-0.5 text-xs tracking-wider text-white/60">{yearMonth}</Text>
-            <View className="flex-row items-baseline">
-              <Text className="text-[52px] font-bold leading-none text-white">{day}</Text>
-              <Text className="ml-1 text-[28px] font-semibold text-white/80">일</Text>
+    // The sheet is a sibling of the SafeAreaView, not a child, so its backdrop
+    // reaches the notch instead of stopping at the safe area's padding.
+    <View className="flex-1">
+      <SafeAreaView className="flex-1 bg-white">
+        {detail.photoUrl !== null ? (
+          <View className="h-72 w-full">
+            <Image
+              source={{ uri: detail.photoUrl }}
+              className="h-full w-full"
+              resizeMode="cover"
+              accessibilityLabel={detail.title}
+            />
+            <View className="absolute left-0 right-0 top-0 flex-row items-center px-3 py-1">
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="뒤로"
+                onPress={goBack}
+                className="rounded-full bg-black/30 p-2 active:opacity-70"
+                hitSlop={8}>
+                <IcChevronLeft size={22} color={colors.white} />
+              </Pressable>
+              <View className="flex-1" />
+              {actions}
+            </View>
+            <View className="absolute bottom-5 left-5">
+              <Text className="mb-0.5 text-xs tracking-wider text-white/60">{yearMonth}</Text>
+              <View className="flex-row items-baseline">
+                <Text className="text-[52px] font-bold leading-none text-white">{day}</Text>
+                <Text className="ml-1 text-[28px] font-semibold text-white/80">일</Text>
+              </View>
             </View>
           </View>
-        </View>
-      ) : (
-        <View className="bg-parchment">
-          <ScreenHeader onBack={goBack} />
-          <View className="mx-5 mb-2 h-24 items-center justify-center rounded-2xl border border-sage/20 bg-sage-pale/50">
-            <IcImage size={28} color={colors.sage} />
-            <Text className="mt-1 text-xs text-sage">사진 없음</Text>
+        ) : (
+          <View className="bg-parchment">
+            <ScreenHeader onBack={goBack} right={actions} />
+            <View className="mx-5 mb-2 h-24 items-center justify-center rounded-2xl border border-sage/20 bg-sage-pale/50">
+              <IcImage size={28} color={colors.sage} />
+              <Text className="mt-1 text-xs text-sage">사진 없음</Text>
+            </View>
           </View>
-        </View>
-      )}
+        )}
 
-      <ScrollView className="flex-1" contentContainerClassName="px-5 pb-8 pt-5">
-        <View className="mb-4 flex-row flex-wrap">
-          {detail.emotions.map((code) => (
-            <Badge key={code} label={EMOTION_LABELS[code]} tone="green" />
-          ))}
-          {detail.companion !== null ? (
-            <Badge label={COMPANION_LABELS[detail.companion]} tone="neutral" />
-          ) : null}
-          {detail.situation !== null ? (
-            <Badge label={SITUATION_LABELS[detail.situation]} tone="neutral" />
-          ) : null}
-        </View>
-
-        <Text className="mb-4 text-[24px] leading-snug text-ink">{detail.title}</Text>
-
-        <View className="mb-5 flex-row items-center border-b border-line pb-4">
-          <View className="flex-row items-center">
-            <IcClock size={13} color={colors.inkMuted} />
-            <Text className="ml-1.5 text-xs text-ink-muted">
-              {formatDurationMinutes(detail.durationSeconds)}
-            </Text>
+        <ScrollView className="flex-1" contentContainerClassName="px-5 pb-8 pt-5">
+          <View className="mb-4 flex-row flex-wrap">
+            {detail.emotions.map((code) => (
+              <Badge key={code} label={EMOTION_LABELS[code]} tone="green" />
+            ))}
+            {detail.companion !== null ? (
+              <Badge label={COMPANION_LABELS[detail.companion]} tone="neutral" />
+            ) : null}
+            {detail.situation !== null ? (
+              <Badge label={SITUATION_LABELS[detail.situation]} tone="neutral" />
+            ) : null}
           </View>
-          {detail.locationSummary !== null ? (
-            <View className="ml-4 flex-1 flex-row items-center">
-              <IcLocation size={13} color={colors.inkMuted} />
-              <Text className="ml-1.5 text-xs text-ink-muted" numberOfLines={1}>
-                {detail.locationSummary}
+
+          <Text className="mb-4 text-[24px] leading-snug text-ink">{detail.title}</Text>
+
+          <View className="mb-5 flex-row items-center border-b border-line pb-4">
+            <View className="flex-row items-center">
+              <IcClock size={13} color={colors.inkMuted} />
+              <Text className="ml-1.5 text-xs text-ink-muted">
+                {formatDurationMinutes(detail.durationSeconds)}
               </Text>
             </View>
-          ) : (
-            <View className="flex-1" />
-          )}
-          <Text className="ml-3 text-xs text-ink-subtle">{formatTime(startedAtMs)}</Text>
-        </View>
-
-        {detail.body !== null ? (
-          <Text className="mb-6 text-sm leading-7 text-ink">{detail.body}</Text>
-        ) : null}
-
-        {detail.tags.length > 0 ? (
-          <View className="mb-5 flex-row flex-wrap">
-            {detail.tags.map((tag) => (
-              <View key={tag} className="mb-1.5 mr-1.5 rounded-full bg-parchment px-3 py-1.5">
-                <Text className="text-xs text-ink-muted">#{tag}</Text>
+            {detail.locationSummary !== null ? (
+              <View className="ml-4 flex-1 flex-row items-center">
+                <IcLocation size={13} color={colors.inkMuted} />
+                <Text className="ml-1.5 text-xs text-ink-muted" numberOfLines={1}>
+                  {detail.locationSummary}
+                </Text>
               </View>
-            ))}
+            ) : (
+              <View className="flex-1" />
+            )}
+            <Text className="ml-3 text-xs text-ink-subtle">{formatTime(startedAtMs)}</Text>
           </View>
-        ) : null}
 
-        <Text className="text-xs text-ink-subtle">{formatKoreanDate(startedAtMs)}</Text>
-      </ScrollView>
-    </SafeAreaView>
+          {detail.body !== null ? (
+            <Text className="mb-6 text-sm leading-7 text-ink">{detail.body}</Text>
+          ) : null}
+
+          {detail.tags.length > 0 ? (
+            <View className="mb-5 flex-row flex-wrap">
+              {detail.tags.map((tag) => (
+                <View key={tag} className="mb-1.5 mr-1.5 rounded-full bg-parchment px-3 py-1.5">
+                  <Text className="text-xs text-ink-muted">#{tag}</Text>
+                </View>
+              ))}
+            </View>
+          ) : null}
+
+          <Text className="text-xs text-ink-subtle">{formatKoreanDate(startedAtMs)}</Text>
+        </ScrollView>
+      </SafeAreaView>
+
+      {confirming ? (
+        <ConfirmDeleteSheet
+          busy={deletePhase === 'deleting'}
+          error={deleteError}
+          onConfirm={() => {
+            void deleteExperience(detail.experienceId).then((removed) => {
+              // The store has already dropped the row and cleared the detail,
+              // so this screen paints its neutral spinner for the frame before
+              // the replace lands — never the "찾을 수 없어요" card.
+              if (removed) goBack();
+            });
+          }}
+          onCancel={() => {
+            clearWriteErrors();
+            setConfirming(false);
+          }}
+        />
+      ) : null}
+    </View>
   );
 }

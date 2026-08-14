@@ -185,3 +185,24 @@ export function IcShield({ size = 18, color = colors.ink }: IconProps) {
     </Svg>
   );
 }
+
+export function IcEdit({ size = 18, color = colors.ink }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" {...strokeProps(color)}>
+      <Path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+      <Path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+    </Svg>
+  );
+}
+
+export function IcTrash({ size = 18, color = colors.ink }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" {...strokeProps(color)}>
+      <Polyline points="3 6 5 6 21 6" />
+      <Path d="M19 6l-1 14H6L5 6" />
+      {/* Both handle bars are one Path with two subpaths, as in the prototype. */}
+      <Path d="M10 11v6M14 11v6" />
+      <Path d="M9 6V4h6v2" />
+    </Svg>
+  );
+}

@@ -48,12 +48,24 @@ const MUST_BE_PRESENT = [
   ['/walk button 저장할게요', '저장할게요'],
   ['/walk button 괜찮아요', '괜찮아요'],
   ['diary photo headline', '사진이 있나요?'],
+  // Guards the option-picker extraction: the companion/emotion/situation UI now
+  // lives in components/option-picker.tsx, and this is the only string unique to
+  // the screen that consumes it. '생각에 잠긴' would NOT catch a regression here
+  // — it comes from api/types.ts and ships even if this screen leaves the graph.
+  ['diary context question', '함께였나요?'],
   ['diary generating headline', '산책 기억을 만들고 있어요'],
   ['diary failure headline', '산책 기억을 만들지 못했어요'],
   ['diary preview header', '산책 기억 미리보기'],
   ['home subtitle', '당신의 산책을 모와드릴까요?'],
   ['archive subtitle', '산책 기억 모음'],
   ['archive empty state', '산책 기록이 없어요'],
+  // 기능 7·8 on /experiences/[experienceId]. The detail screen never had a
+  // control; the sheet's headline is unique to the new module. The EDITOR has
+  // none on purpose — every string in it is reused from the diary flow, so no
+  // grep can distinguish it. It is a static import of this route, which makes
+  // Gate 1 and Gate 3 its real guards.
+  ['experience detail not-found', '삭제되었거나 존재하지 않는 기록이에요.'],
+  ['delete sheet headline', '이 기록을 삭제할까요?'],
   // Auth + settings screens. One unique headline each, so a screen whose
   // import graph broke is caught here rather than at runtime.
   ['onboarding signature', '기록이 쌓이면, 기억이 됩니다.'],

@@ -5,7 +5,8 @@
 > 명세 원본: `docs/backend/api-spec.md` (최종 MVP API 14개). 계약 타입·경로 상수는
 > `src/api/types.ts`, HTTP 클라이언트는 `src/api/client.ts`.
 
-기준 시점: 로그인·설정 `feature/auth-settings` (2026-08-15).
+기준 시점: 기록 수정·삭제 `feature/experience-edit-delete` (2026-08-15).
+**14개 엔드포인트 전부 연동 완료.**
 
 ## 범례
 
@@ -29,8 +30,8 @@
 | 10 | 경험 확정 (기능 5) | POST | `/walk-experiences` | ✅ | `client.ts` `createWalkExperience`. 미리보기·수정 화면의 저장이 사용자 확정값(제목·본문·태그·감정 등)을 스냅샷으로 전송. SUCCESS 후의 입력 수정도 이 POST에 실린다 (draft는 SUCCESS에서 불변) |
 | 11 | 아카이브 목록 (기능 6·12) | GET | `/walk-experiences` | ✅ | `client.ts` `listWalkExperiences(query)` — from/to/tag 전부 구현, 호출 전 `isValidListQuery`로 잘못된 조합을 왕복 없이 400 처리. 앱은 **쿼리 없이 전체 조회**만 사용하고 기간 탭은 클라이언트에서 KST로 거른다 (아래 공백 8 옆 처분). 호출자는 `experience-store.loadList`, 화면은 `/`(홈 스트립)·`/archive` |
 | 12 | 상세 조회 (기능 7) | GET | `/walk-experiences/{experienceId}` | ✅ | `client.ts` `getWalkExperience`. `/experiences/[experienceId]` 상세 화면 (`experience-store`). 일기 플로우 완료가 여기로 랜딩 |
-| 13 | 경험 수정 (기능 8) | PATCH | `/walk-experiences/{experienceId}` | ⬜ | title은 비울 수 없음. emotions/tags 전체 교체 |
-| 14 | 경험 삭제 (기능 8) | DELETE | `/walk-experiences/{experienceId}` | ⬜ | Soft delete. 같은 Draft로 재생성 불가 |
+| 13 | 경험 수정 (기능 8) | PATCH | `/walk-experiences/{experienceId}` | ✅ | `client.ts` `updateWalkExperience`. 호출자는 `experience-store.updateExperience`, 화면은 `/experiences/[experienceId]`의 **인라인 수정 모드**(별도 라우트 없음). 명세가 허용하는 7개 필드를 모두 편집하며, `buildExperiencePatch`가 **바뀐 필드만** 담는다. title은 비울 수 없고 emotions/tags는 전체 교체 — 둘 다 **집합으로 비교**해 순서 변화를 변경으로 오인하지 않는다. 불변 4개 필드는 `UpdateWalkExperienceRequest`에 키가 없어 대입이 컴파일 에러다 |
+| 14 | 경험 삭제 (기능 8) | DELETE | `/walk-experiences/{experienceId}` | ✅ | `client.ts` `deleteWalkExperience`. 호출자는 `experience-store.deleteExperience`, 화면은 상세의 삭제 확인 시트(`confirm-delete-sheet.tsx`). Soft delete라 이미 삭제된 건은 404이고 **클라이언트는 그 404를 성공으로 취급**한다(의도가 이미 달성됨). 같은 Draft로 재생성 불가는 서버 규칙이고 클라이언트에는 옛 draft를 재확정할 경로가 없다 |
 
 서버 API가 **없는 것으로 명세가 확정**한 영역: 권한·자동 감지 ON/OFF·로컬 알림(기능 9),
 상태 관리 전용 API(기능 10), 사진 선택(기능 11), 로그아웃(클라이언트 토큰 삭제, 기능 13).
@@ -49,6 +50,19 @@ UserDefaults가 원본이고 `SecureStorePort`가 웹·첫 페인트용 사본�
 - 시각은 감지기의 epoch ms를 `toIsoDateTime`으로 ISO 8601로 변환해 보낸다.
 - `emotions[]`/`tags[]`는 전체 교체 방식이며 집합으로 비교한다 (순서 비보장).
 - 클라이언트는 실패한 요청을 **자동 재시도하지 않는다** (멱등 키 부재 — 아래 공백 5).
+- **기능 8의 PATCH는 변경된 필드만 보낸다** (`src/lib/experience-input.ts`
+  `buildExperiencePatch`). 바뀐 게 없으면 요청 자체를 생략한다 — 명세에 빈 PATCH
+  정의가 없어 실패만 가능한 왕복이기 때문이다. 생성(POST)의 "빈 배열은 생략"
+  습관은 여기서 **뒤집힌다**: PATCH에서 `[]` 생략은 *유지*라서 감정을 전부
+  해제하려면 `[]`를 명시해야 한다.
+- **PATCH·DELETE의 응답 본문에 의존하지 않는다** (아래 공백 9). 200을 받으면
+  *보낸 patch*를 `detail`과 캐시된 목록 행에 적용한다. 명세의 "생략=유지,
+  전송=설정" 때문에 결과 레코드가 요청만으로 완전히 결정되고, patch에는 스냅샷
+  컬럼 키가 아예 없어 불변 필드를 건드릴 수 없다. 재조회를 하지 않는 이유는
+  홈·기록장이 마운트당 1회만 목록을 조회하기 때문 — 스토어 캐시를 직접 고쳐야
+  삭제·수정이 즉시 반영된다.
+- **DELETE의 404는 성공이다.** 명세상 이미 삭제된 건의 재삭제가 404이고,
+  호출자의 의도("이건 없어야 한다")는 이미 충족돼 있다.
 
 ## 명세에서 확인된 공백과 처분 (공백 확인·처분 결정 모두 2026-08-13)
 
@@ -110,6 +124,18 @@ UserDefaults가 원본이고 `SecureStorePort`가 웹·첫 페인트용 사본�
    있고, 모든 행이 값을 가질 때만 합산하므로 백엔드가 내려주는 순간 자동으로 켜진다.
    mock은 기본적으로 명세 그대로(필드 없음) 응답하며, 합산 로직 검증용으로
    `MOCK_LIST_DURATION=1` 스위치를 둔다.
+9. **기능 8의 PATCH·DELETE 응답 본문이 명세에 없다** (2026-08-15 확인).
+   `api-spec.md` 기능 8은 두 요청의 Request만 규정하고 Response를 정의하지
+   않는다. mock은 자체적으로 PATCH에 상세 뷰 전체를, DELETE에
+   `{ experienceId, deletedAt }`를 돌려주지만 **그건 mock의 창작이지 계약이
+   아니다.** 실백엔드가 `204 No Content`로 답하는 것이 "본문 없음"의 자연스러운
+   해석인데, 그러면 envelope 파싱 실패가 되어 **성공한 저장이 전부 오류로
+   보인다.**
+   → **처분: 양방향 차단.** `client.ts`의 `requestJson`에 `bodyless` 옵션을 두어
+   ① 2xx + 빈 본문/비-envelope를 성공으로 처리하고 ② 서버가 무엇을 보내든
+   버려서 어떤 호출자도 본문에 의존할 수 없게 했다. 두 함수의 반환 타입이
+   `ApiResult<null>`인 것이 그 계약의 타입 수준 선언이다. 실백엔드 연결 시
+   실제 상태 코드를 확인하고, 확정되면 이 항목을 닫는다.
 
 ## 목록 필터 처분 (2026-08-14)
 
