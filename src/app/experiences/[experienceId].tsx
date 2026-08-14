@@ -141,7 +141,7 @@ export default function ExperienceDetailScreen() {
           ) : null}
         </View>
 
-        <Text className="mb-4 text-[24px] font-bold leading-snug text-ink">{detail.title}</Text>
+        <Text className="mb-4 text-[24px] leading-snug text-ink">{detail.title}</Text>
 
         <View className="mb-5 flex-row items-center border-b border-line pb-4">
           <View className="flex-row items-center">

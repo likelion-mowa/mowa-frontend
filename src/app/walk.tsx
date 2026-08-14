@@ -6,7 +6,7 @@ import { Redirect } from 'expo-router';
 import { PrimaryButton, SecondaryButton } from '@/components/buttons';
 import { IcWalk } from '@/components/icons';
 import { durationMinutes, formatKoreanDate, formatTime } from '@/lib/format';
-import { colors } from '@/lib/theme';
+import { colors, shadows } from '@/lib/theme';
 import { useWalkCandidateFlow } from '@/stores/walk-candidate-store';
 
 /**
@@ -60,7 +60,7 @@ export default function WalkSuggestionScreen() {
     <SafeAreaView className="flex-1 bg-parchment">
       {/* Notification-style banner, echoing the push the user just tapped. */}
       <View className="px-4 pt-2">
-        <View className="overflow-hidden rounded-2xl border border-line bg-white">
+        <View style={shadows.banner} className="overflow-hidden rounded-2xl border border-line bg-white">
           <View className="flex-row items-center border-b border-line px-4 py-3">
             <View className="h-8 w-8 items-center justify-center rounded-xl bg-sage">
               <IcWalk size={16} color={colors.white} />
@@ -80,8 +80,9 @@ export default function WalkSuggestionScreen() {
       </View>
 
       <View className="flex-1 px-4 py-2">
-        <View className="rounded-2xl border border-line bg-white p-5">
-          <Text className="mb-2 text-lg font-bold leading-snug text-ink">
+        <View style={shadows.card} className="rounded-2xl border border-line bg-white p-5">
+          {/* 18px regular, not bold — the prototype's display headlines carry no bold. */}
+          <Text className="mb-2 text-[18px] leading-snug text-ink">
             이 산책을 기억으로{'\n'}남겨볼까요?
           </Text>
           <Text className="mb-5 text-sm leading-relaxed text-ink-muted">

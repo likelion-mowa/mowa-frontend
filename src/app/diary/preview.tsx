@@ -81,7 +81,7 @@ export default function DiaryPreviewScreen() {
           <Text className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-ink-subtle">
             제목
           </Text>
-          <Text className="text-[22px] font-bold leading-snug text-ink">{title}</Text>
+          <Text className="text-[22px] leading-snug text-ink">{title}</Text>
         </View>
 
         <View className="mb-4">

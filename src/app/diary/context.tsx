@@ -52,6 +52,9 @@ const SITUATION_EMOJI: Record<Situation, string> = {
   EXPLORING: '🗺️',
 };
 
+const pressedScale = ({ pressed }: { pressed: boolean }) =>
+  pressed ? { transform: [{ scale: 0.97 }] } : undefined;
+
 function WideOption({
   emoji,
   label,
@@ -67,7 +70,8 @@ function WideOption({
     <Pressable
       accessibilityRole="button"
       onPress={onPress}
-      className={`mb-3 flex-row items-center rounded-2xl border-2 px-5 py-4 active:opacity-80 ${
+      style={pressedScale}
+      className={`mb-3 flex-row items-center rounded-2xl border-2 px-5 py-4 ${
         selected ? 'border-sage bg-sage' : 'border-line bg-white'
       }`}>
       <Text className="text-3xl">{emoji}</Text>
@@ -94,7 +98,8 @@ function GridOption({
     <Pressable
       accessibilityRole="button"
       onPress={onPress}
-      className={`mb-3 w-[48%] items-center rounded-2xl border-2 py-6 active:opacity-80 ${
+      style={pressedScale}
+      className={`mb-3 w-[48%] items-center rounded-2xl border-2 py-6 ${
         selected ? 'border-sage bg-sage' : 'border-line bg-white'
       }`}>
       <Text className="text-3xl">{emoji}</Text>
@@ -102,6 +107,44 @@ function GridOption({
         {label}
       </Text>
     </Pressable>
+  );
+}
+
+function OptionGridRows<T extends string>({
+  codes,
+  emoji,
+  labels,
+  isSelected,
+  onToggle,
+}: {
+  codes: readonly T[];
+  emoji: Record<T, string>;
+  labels: Record<T, string>;
+  isSelected: (code: T) => boolean;
+  onToggle: (code: T) => void;
+}) {
+  const rows: T[][] = [];
+  for (let i = 0; i < codes.length; i += 2) rows.push(codes.slice(i, i + 2) as T[]);
+  return (
+    <View>
+      {rows.map((row, index) => (
+        // A lone last option sits centered — the prototype spans it across
+        // both columns (gridColumn '1 / -1', margin auto) at half width.
+        <View
+          key={index}
+          className={`flex-row ${row.length === 1 ? 'justify-center' : 'justify-between'}`}>
+          {row.map((code) => (
+            <GridOption
+              key={code}
+              emoji={emoji[code]}
+              label={labels[code]}
+              selected={isSelected(code)}
+              onPress={() => onToggle(code)}
+            />
+          ))}
+        </View>
+      ))}
+    </View>
   );
 }
 
@@ -178,36 +221,29 @@ export default function DiaryContextScreen() {
         ) : null}
 
         {step === 2 ? (
-          <View className="flex-row flex-wrap justify-between">
-            {EMOTIONS.map((code) => (
-              <GridOption
-                key={code}
-                emoji={EMOTION_EMOJI[code]}
-                label={EMOTION_LABELS[code]}
-                selected={emotions.includes(code)}
-                onPress={() => toggleEmotion(code)}
-              />
-            ))}
-          </View>
+          <OptionGridRows
+            codes={EMOTIONS}
+            emoji={EMOTION_EMOJI}
+            labels={EMOTION_LABELS}
+            isSelected={(code) => emotions.includes(code)}
+            onToggle={toggleEmotion}
+          />
         ) : null}
 
         {step === 3 ? (
-          <View className="flex-row flex-wrap justify-between">
-            {SITUATIONS.map((code) => (
-              <GridOption
-                key={code}
-                emoji={SITUATION_EMOJI[code]}
-                label={SITUATION_LABELS[code]}
-                selected={situation === code}
-                onPress={() => setSituation(situation === code ? null : code)}
-              />
-            ))}
-          </View>
+          <OptionGridRows
+            codes={SITUATIONS}
+            emoji={SITUATION_EMOJI}
+            labels={SITUATION_LABELS}
+            isSelected={(code) => situation === code}
+            onToggle={(code) => setSituation(situation === code ? null : code)}
+          />
         ) : null}
       </ScrollView>
 
       <View className="px-5 pb-8 pt-3">
         <PrimaryButton
+          glow
           label={step === 3 ? '산책 기억 만들기' : '다음으로'}
           onPress={handleNext}
         />

@@ -59,7 +59,8 @@ export default function DiaryPhotoScreen() {
       />
 
       <ScrollView className="flex-1 px-5 pt-2" contentContainerClassName="pb-6">
-        <Text className="mb-1.5 text-xl font-bold text-ink">사진이 있나요?</Text>
+        {/* Prototype display headline — regular weight, not bold. */}
+        <Text className="mb-1.5 text-xl text-ink">사진이 있나요?</Text>
         <Text className="mb-6 text-sm leading-relaxed text-ink-muted">
           산책 중 찍은 사진이 있다면 함께 저장할 수 있어요.
         </Text>
