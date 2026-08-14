@@ -12,11 +12,18 @@ export function ScreenHeader({
   title,
   onBack,
   center,
+  right,
 }: {
   title?: string;
   onBack: () => void;
   /** Replaces the title with arbitrary content (the step-dots rail). */
   center?: ReactNode;
+  /**
+   * Action buttons on the trailing edge (산책 상세's 수정·삭제). Replaces the
+   * spacer, so content wider than the back chevron nudges a `title` off centre
+   * — pass one or the other, not both.
+   */
+  right?: ReactNode;
 }) {
   return (
     <View className="flex-row items-center px-3 py-2">
@@ -33,7 +40,7 @@ export function ScreenHeader({
           <Text className="text-sm font-semibold text-ink">{title}</Text>
         ) : null)}
       </View>
-      <View className="w-10" />
+      {right ?? <View className="w-10" />}
     </View>
   );
 }
