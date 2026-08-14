@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Redirect } from 'expo-router';
@@ -43,20 +43,27 @@ export default function WalkSuggestionScreen() {
   const phase = useWalkCandidateFlow((state) => state.suggestionPhase);
   const candidate = useWalkCandidateFlow((state) => state.activeCandidate);
   const openSuggestion = useWalkCandidateFlow((state) => state.openSuggestion);
-  const closeSuggestion = useWalkCandidateFlow((state) => state.closeSuggestion);
   const chooseKeep = useWalkCandidateFlow((state) => state.chooseKeep);
   const chooseSkip = useWalkCandidateFlow((state) => state.chooseSkip);
 
+  // No unmount cleanup on purpose: a notification tap can mount this screen
+  // twice, and resetting shared state on the first unmount cancelled the
+  // second mount's work (measured on device 2026-08-14). Instead the phase
+  // left over from a previous visit is ignored until this mount's own
+  // openSuggestion has started, which is what `opened` marks.
+  const opened = useRef(false);
   useEffect(() => {
+    opened.current = true;
     void openSuggestion();
-    return closeSuggestion;
-  }, [openSuggestion, closeSuggestion]);
+  }, [openSuggestion]);
 
   // Declarative, so a redirect cannot race the navigator's readiness: nothing
   // is left to act on, and the home screen is where the flow ends.
-  if (phase === 'missing' || phase === 'done') return <Redirect href="/" />;
+  if (opened.current && (phase === 'missing' || phase === 'done')) {
+    return <Redirect href="/" />;
+  }
 
-  if (candidate === null || phase === 'idle' || phase === 'loading') {
+  if (!opened.current || candidate === null || phase === 'idle' || phase === 'loading') {
     return <SafeAreaView className="flex-1 bg-walk-soft" />;
   }
 

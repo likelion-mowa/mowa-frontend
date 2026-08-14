@@ -78,17 +78,22 @@ type WalkCandidateFlowState = {
   openSuggestion(): Promise<void>;
   chooseKeep(): Promise<void>;
   chooseSkip(): Promise<void>;
-  /** /walk unmount. */
-  closeSuggestion(): void;
 };
 
 // Module scope, not store state: Fast Refresh remounts the layout effect, and
 // a second live subscription would POST every detection twice.
 let subscribed = false;
 let storageReady = false;
-// A /walk mount can outlive its own async work (Fast Refresh remounts the
-// effect too), so every openSuggestion run carries an id and a superseded run
-// drops its result instead of overwriting newer state.
+/**
+ * Only a NEWER openSuggestion supersedes an older one — nothing else may
+ * invalidate a run.
+ *
+ * Measured on device 2026-08-14: a notification tap mounted /walk twice, and
+ * an unmount-time reset (the screen used to call closeSuggestion) cancelled
+ * the *newer* mount's in-flight work and wiped its state, leaving a blank
+ * screen and a candidate stuck at DETECTED. The screen now owns nothing that
+ * a sibling instance can cancel.
+ */
 let suggestionRun = 0;
 
 /** Server-side CHECK: detected_end_at >= detected_start_at, duration >= 0. */
@@ -429,13 +434,6 @@ export const useWalkCandidateFlow = create<WalkCandidateFlowState>((set, get) =>
 
     chooseSkip: async () => {
       await submitChoice('SKIPPED');
-    },
-
-    closeSuggestion: () => {
-      // Invalidate any in-flight open so its result cannot land on the next mount.
-      suggestionRun += 1;
-      if (get().suggestionPhase === 'submitting') return;
-      set({ suggestionPhase: 'idle', activeCandidate: null });
     },
   };
 });
