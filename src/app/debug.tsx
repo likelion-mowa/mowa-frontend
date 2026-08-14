@@ -1,6 +1,7 @@
 import { useCallback, useEffect } from 'react';
 import { Platform, Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { Link } from 'expo-router';
 
 import {
   health,
@@ -32,6 +33,12 @@ import { useWalkCandidateFlow } from '@/stores/walk-candidate-store';
  *
  * Throwaway — delete once real screens land.
  */
+
+/** Sensor liveness reads better as "how long ago" than as a wall clock. */
+function agoLabel(epochMs: number | null): string {
+  if (epochMs === null) return 'never';
+  return `${Math.max(0, Math.round((Date.now() - epochMs) / 1000))}s ago`;
+}
 
 function Row({ label, value }: { label: string; value: string }) {
   return (
@@ -290,6 +297,55 @@ export default function SmokeScreen() {
           />
 
           <View className="h-4" />
+          <Text className="mb-1 text-xs font-semibold text-neutral-500">
+            walk session — why detection is quiet
+          </Text>
+          <Row
+            label="activity / confidence"
+            value={
+              state.diagnostics
+                ? `${state.diagnostics.activity} / ${state.diagnostics.confidence}`
+                : '—'
+            }
+          />
+          <Row
+            label="last activity callback"
+            value={agoLabel(state.diagnostics?.lastActivityAtMs ?? null)}
+          />
+          <Row
+            label="last pedometer callback"
+            value={agoLabel(state.diagnostics?.lastPedometerAtMs ?? null)}
+          />
+          <Row
+            label="walk session"
+            value={
+              state.diagnostics
+                ? state.diagnostics.walkActive
+                  ? `active · ${state.diagnostics.walkSteps} steps${state.diagnostics.walkQualified ? ' · qualified' : ''}`
+                  : 'none'
+                : '—'
+            }
+          />
+          <Row
+            label="ending in"
+            value={
+              state.diagnostics == null || state.diagnostics.stationarySinceMs == null
+                ? '—'
+                : `${Math.max(
+                    0,
+                    Math.round(
+                      state.diagnostics.endDebounceSeconds -
+                        (Date.now() - state.diagnostics.stationarySinceMs) / 1000,
+                    ),
+                  )}s`
+            }
+          />
+          <Row
+            label="total steps since start"
+            value={state.diagnostics ? String(state.diagnostics.currentSteps) : '—'}
+          />
+
+          <View className="h-4" />
           <Row label="queryHistory() rows" value={String(state.history.length)} />
           {state.history.map((walk) => (
             <Row
@@ -400,9 +456,34 @@ export default function SmokeScreen() {
               })
             }
           />
+          <Button
+            title="Synthetic FINISHED walk (20 min, with end)"
+            onPress={() => {
+              const endedAtMs = Date.now();
+              void flow.handleWalkEvent({
+                id: `debug-${endedAtMs}`,
+                startedAtMs: endedAtMs - 20 * 60 * 1000,
+                endedAtMs,
+                steps: 1200,
+                source: 'stub',
+              });
+            }}
+          />
+          <Link href="/walk" asChild>
+            <Pressable className="mt-2 rounded-lg bg-neutral-200 px-4 py-3 active:opacity-70">
+              <Text className="text-center text-sm font-semibold text-neutral-600">
+                Open /walk — suggestion screen
+              </Text>
+            </Pressable>
+          </Link>
           <Text className="mt-2 text-xs text-neutral-500">
             Calls the store handler directly, so it works on web too. On iOS,
             emitTestEvent above reaches the same flow through the real subscription.
+            The /walk link is the only way to re-enter the suggestion screen without
+            walking again — a tapped notification is gone from Notification Center.
+            The second button is the shape a real detection now has — the detector
+            fires once, after the walk ended — so it exercises the end-value PATCH
+            that a walk-less environment otherwise cannot reach.
           </Text>
           {flow.log.map((line, i) => (
             <Text key={i} className="font-mono text-xs text-neutral-700">

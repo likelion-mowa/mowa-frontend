@@ -2,6 +2,11 @@
 export type WalkEvent = {
   id: string;
   startedAtMs: number;
+  /**
+   * Set on every real detection: a live event fires once the walk is over
+   * (the Core debounces the stationary period), and retrospective rows carry
+   * the segment's end. Null only on stub events from emitTestEvent.
+   */
   endedAtMs: number | null;
   steps: number;
   /** `stub` comes only from emitTestEvent; real detection emits `live` / `retrospective`. */
@@ -50,6 +55,31 @@ export type WalkDetectorDiagnostics = {
   locationAuthorization: string;
   /** Dev-facing preflight warnings from the native core (Korean). Empty = healthy. */
   warnings: string[];
+
+  /**
+   * Walk-session state. A detector that stays quiet is doing one of a few
+   * distinguishable things, and these are what tell them apart:
+   * no walking classification, a dead sensor subscription, a walk under the
+   * step bar, or an end still inside the stationary debounce.
+   */
+  /** Last CoreMotion classification, e.g. 'walking+stationary' or 'unknown'. */
+  activity: string;
+  /** Its confidence: 'low' | 'medium' | 'high' | '?' | '-'. Low is rejected. */
+  confidence: string;
+  /** Pedometer total since detection started (not per walk). */
+  currentSteps: number;
+  walkActive: boolean;
+  walkStartedAtMs: number | null;
+  /** Steps in the current walk. Compared against the 30-step bar. */
+  walkSteps: number;
+  /** True once this walk passed the bar; the end is what notifies. */
+  walkQualified: boolean;
+  /** Set while an end is being debounced — the real moment the user stopped. */
+  stationarySinceMs: number | null;
+  endDebounceSeconds: number;
+  /** Sensor liveness. A stale value with detection running means a dead subscription. */
+  lastActivityAtMs: number | null;
+  lastPedometerAtMs: number | null;
 };
 
 export type WalkDetectorModuleEvents = {
