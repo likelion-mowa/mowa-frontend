@@ -23,6 +23,7 @@ import {
   type LoginResponse,
   type MeResponse,
   type UpdateExperienceDraftRequest,
+  type UpdateMeRequest,
   type UpdateWalkCandidateRequest,
   type Uuid,
   type WalkCandidate,
@@ -57,10 +58,32 @@ export function hasAccessToken(): boolean {
   return accessToken !== null;
 }
 
+let sessionExpiredHandler: (() => void) | null = null;
+
+/**
+ * Called once, by the auth store, when a request fails with 401 while a token
+ * was set. Registered rather than imported so this file keeps knowing nothing
+ * about stores or navigation — the redirect is a consequence of auth state, not
+ * something any screen handles.
+ */
+export function setSessionExpiredHandler(handler: (() => void) | null): void {
+  sessionExpiredHandler = handler;
+}
+
+type RequestOptions = {
+  /**
+   * Endpoints that need no token. Only `/auth/login` today, and it matters: a
+   * 401 there means wrong credentials, not an expired session, and must not
+   * eject the user who is currently typing them.
+   */
+  public?: boolean;
+};
+
 async function requestJson<T>(
   method: 'GET' | 'POST' | 'PATCH' | 'DELETE',
   path: string,
   body?: unknown,
+  options?: RequestOptions,
 ): Promise<ApiResult<T>> {
   let response: Response;
   try {
@@ -102,6 +125,22 @@ async function requestJson<T>(
           ? envelope.message
           : `${envelope.error.code}: ${envelope.error.detail}`;
     console.log(`[MOWA] api ${method} ${path} → ${response.status} — ${logDetail}`);
+
+    // Session expiry, handled in exactly one place. The spec defines no token
+    // TTL and no refresh (docs/backend/api-spec.md 기능 13), so a 401 on an
+    // authenticated call is terminal for the session: discard the token here,
+    // or `hasAccessToken()` keeps returning true and every later request 401s
+    // forever with no recovery but an app restart.
+    if (response.status === 401 && options?.public !== true) {
+      // Only the request that actually had a token reports the expiry. This
+      // makes N concurrent 401s notify once (the first nulls the token, the
+      // rest read false), and stops a tokenless 401 from ejecting someone who
+      // is already signed out.
+      const hadToken = accessToken !== null;
+      accessToken = null;
+      if (hadToken) sessionExpiredHandler?.();
+    }
+
     return {
       ok: false,
       status: response.status,
@@ -114,7 +153,9 @@ async function requestJson<T>(
 
 export const api = {
   login(credentials: LoginRequest): Promise<ApiResult<LoginResponse>> {
-    return requestJson<LoginResponse>('POST', endpoints.login(), credentials);
+    // `public` is a flag, not a path comparison: `generateAiDiary` already
+    // appends `?fail=1` to a path, so paths are not stable identifiers here.
+    return requestJson<LoginResponse>('POST', endpoints.login(), credentials, { public: true });
   },
 
   createWalkCandidate(body: CreateWalkCandidateRequest): Promise<ApiResult<WalkCandidate>> {
@@ -212,8 +253,18 @@ export const api = {
     return requestJson<WalkExperienceListItem[]>('GET', `${endpoints.walkExperiences()}${suffix}`);
   },
 
-  /** Profile (기능 4) — the archive header greets the user by nickname. */
+  /** Profile (기능 13) — the archive header greets the user by nickname. */
   getMe(): Promise<ApiResult<MeResponse>> {
     return requestJson<MeResponse>('GET', endpoints.me());
+  },
+
+  /**
+   * 기능 13 — the nickname is the only editable field in the MVP (profile
+   * image, password change and account deletion are all excluded by the spec).
+   * The spec names no response body; the mock returns the full MeResponse and
+   * that is what the store consumes.
+   */
+  updateMe(body: UpdateMeRequest): Promise<ApiResult<MeResponse>> {
+    return requestJson<MeResponse>('PATCH', endpoints.me(), body);
   },
 };
