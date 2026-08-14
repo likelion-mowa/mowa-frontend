@@ -6,7 +6,6 @@ import type {
   WalkExperienceDetail,
   WalkExperienceListItem,
 } from '@/api/types';
-import { useWalkCandidateFlow } from '@/stores/walk-candidate-store';
 
 /**
  * Read side of walk_experiences: the archive list (기능 6) and one detail
@@ -63,11 +62,6 @@ export const useExperiences = create<ExperienceState>((set, get) => {
     }));
   };
 
-  const ensureToken = async (): Promise<boolean> => {
-    if (hasAccessToken()) return true;
-    return useWalkCandidateFlow.getState().loginWithEnvCredentials();
-  };
-
   // Module-scope rather than state: a second concurrent fetch would be pure
   // waste, and re-rendering on "a fetch is running" is what listPhase is for.
   let listInFlight = false;
@@ -87,7 +81,7 @@ export const useExperiences = create<ExperienceState>((set, get) => {
       // A newer load supersedes this one (fast navigation between details).
       const superseded = () => get().experienceId !== experienceId;
 
-      if (!(await ensureToken())) {
+      if (!hasAccessToken()) {
         append('detail: no session');
         if (!superseded()) set({ phase: 'error' });
         return;
@@ -122,7 +116,7 @@ export const useExperiences = create<ExperienceState>((set, get) => {
       set({ listPhase: 'loading' });
 
       try {
-        if (!(await ensureToken())) {
+        if (!hasAccessToken()) {
           append('list: no session');
           if (run === resetRun) set({ listPhase: 'error' });
           return;
@@ -155,7 +149,7 @@ export const useExperiences = create<ExperienceState>((set, get) => {
      * against a server. /debug section 8 is the caller.
      */
     probeListQuery: async (query) => {
-      if (!(await ensureToken())) {
+      if (!hasAccessToken()) {
         return { status: null, count: null, error: '세션 없음' };
       }
 

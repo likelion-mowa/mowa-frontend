@@ -12,7 +12,7 @@ import {
   type Situation,
   type UpdateExperienceDraftRequest,
 } from '@/api/types';
-import { useWalkCandidateFlow, type ActiveCandidate } from '@/stores/walk-candidate-store';
+import type { ActiveCandidate } from '@/stores/walk-candidate-store';
 
 /**
  * The diary flow (기능 2~5): photo → context → AI generation → preview/edit →
@@ -185,11 +185,6 @@ export const useDiaryFlow = create<DiaryFlowState>((set, get) => {
     }));
   };
 
-  const ensureToken = async (): Promise<boolean> => {
-    if (hasAccessToken()) return true;
-    return useWalkCandidateFlow.getState().loginWithEnvCredentials();
-  };
-
   return {
     ...initial,
     forceAiFailure: false,
@@ -284,7 +279,7 @@ export const useDiaryFlow = create<DiaryFlowState>((set, get) => {
         await settle({ generationPhase: 'failed' });
       };
 
-      if (!(await ensureToken())) {
+      if (!hasAccessToken()) {
         await fail('generate: no session');
         return;
       }
@@ -388,7 +383,7 @@ export const useDiaryFlow = create<DiaryFlowState>((set, get) => {
         return false;
       };
 
-      if (!(await ensureToken())) return fail('save: no session', '로그인 상태를 확인할 수 없어요.');
+      if (!hasAccessToken()) return fail('save: no session', '로그인 상태를 확인할 수 없어요.');
 
       const body: CreateWalkExperienceRequest = { draftId: state.draftId, title };
       const trimmedBody = state.body.trim();

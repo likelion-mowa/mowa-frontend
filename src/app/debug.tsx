@@ -4,13 +4,16 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Link } from 'expo-router';
 
 import {
+  SECURE_KEYS,
   health,
   location,
   notifications,
+  secureStore,
   storage,
   walkDetector,
   type AdapterResult,
 } from '@/adapters';
+import { setAccessToken } from '@/api/client';
 import {
   COMPANION_LABELS,
   COMPANIONS,
@@ -22,6 +25,7 @@ import {
   type ListWalkExperiencesQuery,
 } from '@/api/types';
 import { kstMonthRange, kstNow, kstYearRange } from '@/lib/kst';
+import { useAuth } from '@/stores/auth-store';
 import { useDiagnostics } from '@/stores/diagnostics-store';
 import { useDiaryFlow } from '@/stores/diary-flow-store';
 import { useExperiences } from '@/stores/experience-store';
@@ -77,6 +81,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 export default function SmokeScreen() {
   const state = useDiagnostics();
   const { append, set } = state;
+  const auth = useAuth();
   const flow = useWalkCandidateFlow();
   const diary = useDiaryFlow();
   const experiences = useExperiences();
@@ -446,7 +451,8 @@ export default function SmokeScreen() {
         </Section>
 
         <Section title="6 · Candidate flow (POST /walk-candidates)">
-          <Row label="auth" value={flow.authState} />
+          <Row label="auth" value={auth.status} />
+          <Row label="user" value={auth.user ? `${auth.user.loginId} (${auth.user.nickname})` : '—'} />
           <Row
             label="last detection"
             value={
@@ -458,8 +464,21 @@ export default function SmokeScreen() {
           <Row label="last candidateId" value={flow.lastDetection?.candidateId ?? '—'} />
           <Button
             title="Mock login (env creds)"
-            onPress={() => void flow.loginWithEnvCredentials()}
+            onPress={() => void auth.devSignInWithEnvCredentials()}
           />
+          {/*
+            The mock's tokens never expire (mock/README.md), so the 401 →
+            discard → re-login path cannot occur naturally. Planting the same
+            bogus token the contract test uses is the only way to exercise it.
+          */}
+          <Button
+            title="Plant bogus token (force 401)"
+            onPress={() => {
+              setAccessToken('mock.does-not-exist');
+              void secureStore.setItem(SECURE_KEYS.authToken, 'mock.does-not-exist');
+            }}
+          />
+          <Button title="Sign out" onPress={() => void auth.signOut()} />
           <Button
             title="Synthetic walk event (JS) → flow"
             onPress={() =>

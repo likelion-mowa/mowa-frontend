@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 
 import { storage, walkDetector, type DetectedWalk, type WalkEvent } from '@/adapters';
-import { api, hasAccessToken, setAccessToken } from '@/api/client';
+import { api, hasAccessToken } from '@/api/client';
 import {
   fromIsoDateTime,
   toIsoDateTime,
@@ -28,8 +28,6 @@ import {
  * the home screen. Reconciling those walks via queryHistory is a follow-up
  * task — see docs/api-implementation.md 공백 2.
  */
-
-type AuthState = 'none' | 'ok' | 'failed';
 
 /**
  * Where the walk's end time came from. `detector` is the real thing: the Core
@@ -62,14 +60,12 @@ export type ActiveCandidate = {
 };
 
 type WalkCandidateFlowState = {
-  authState: AuthState;
   lastDetection: DetectedWalk | null;
   log: string[];
 
   suggestionPhase: SuggestionPhase;
   activeCandidate: ActiveCandidate | null;
 
-  loginWithEnvCredentials(): Promise<boolean>;
   handleWalkEvent(event: WalkEvent): Promise<void>;
   /** Idempotent. Returns the unsubscribe for the layout effect's cleanup. */
   startCandidateFlow(): () => void;
@@ -118,12 +114,6 @@ export const useWalkCandidateFlow = create<WalkCandidateFlowState>((set, get) =>
     set((state) => ({
       log: [`${new Date().toLocaleTimeString()}  ${line}`, ...state.log].slice(0, 40),
     }));
-  };
-
-  /** Lazily authenticates. Returns false when the app has no usable session. */
-  const ensureToken = async (): Promise<boolean> => {
-    if (hasAccessToken()) return true;
-    return get().loginWithEnvCredentials();
   };
 
   const ensureStorage = async (): Promise<boolean> => {
@@ -181,7 +171,7 @@ export const useWalkCandidateFlow = create<WalkCandidateFlowState>((set, get) =>
       set({ suggestionPhase: 'ready' });
     };
 
-    if (!(await ensureToken())) {
+    if (!hasAccessToken()) {
       fail('suggestion: no session — choice not sent');
       return;
     }
@@ -241,30 +231,10 @@ export const useWalkCandidateFlow = create<WalkCandidateFlowState>((set, get) =>
   };
 
   return {
-    authState: 'none',
     lastDetection: null,
     log: [],
     suggestionPhase: 'idle',
     activeCandidate: null,
-
-    loginWithEnvCredentials: async () => {
-      const loginId = process.env.EXPO_PUBLIC_MOCK_LOGIN_ID;
-      const password = process.env.EXPO_PUBLIC_MOCK_PASSWORD;
-      if (!loginId || !password) {
-        append('login skipped — EXPO_PUBLIC_MOCK_LOGIN_ID/PASSWORD not set');
-        return false;
-      }
-      const result = await api.login({ loginId, password });
-      if (result.ok) {
-        setAccessToken(result.value.accessToken);
-        set({ authState: 'ok' });
-        append(`login ok as ${loginId}`);
-        return true;
-      }
-      set({ authState: 'failed' });
-      append(`login FAILED (${result.status ?? 'network'}) — ${result.error}`);
-      return false;
-    },
 
     handleWalkEvent: async (event) => {
       append(`event ${event.source} steps=${event.steps} ended=${event.endedAtMs ?? 'null'}`);
@@ -279,8 +249,10 @@ export const useWalkCandidateFlow = create<WalkCandidateFlowState>((set, get) =>
       };
 
       await ensureStorage();
-      await ensureToken();
 
+      // No session: the detection stays in the local buffer and never becomes
+      // a server candidate. Detection runs app-wide, so this is reachable
+      // whenever the token expired while the app was in the background.
       if (hasAccessToken()) {
         const created = await api.createWalkCandidate({
           detectedStartAt: toIsoDateTime(event.startedAtMs),
@@ -348,7 +320,7 @@ export const useWalkCandidateFlow = create<WalkCandidateFlowState>((set, get) =>
         return;
       }
 
-      if (!(await ensureToken())) {
+      if (!hasAccessToken()) {
         giveUp('suggestion: no session — cannot reach the candidate');
         return;
       }
