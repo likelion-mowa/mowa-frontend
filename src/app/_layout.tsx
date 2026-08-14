@@ -1,12 +1,25 @@
 import { useEffect } from 'react';
-import { router, Stack } from 'expo-router';
+import { StyleSheet, View } from 'react-native';
+import { router, Stack, usePathname } from 'expo-router';
+import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 
 // NativeWind entry. Imported exactly once, here.
 import '../../global.css';
 
 import { notifications, type NotificationTapData } from '@/adapters';
+import { useAuth } from '@/stores/auth-store';
 import { useWalkCandidateFlow } from '@/stores/walk-candidate-store';
+
+/**
+ * Held until the session has been restored, so the app never paints home for a
+ * frame before deciding the user is signed out. On web every SplashScreen call
+ * is a verified no-op, which is why the overlay below exists as well.
+ */
+void SplashScreen.preventAutoHideAsync();
+
+/** Routes a signed-out user is allowed to be on. */
+const AUTH_ROUTES = new Set(['/onboarding', '/login']);
 
 /**
  * Paths a walk notification may carry. `/walk` is what the Core writes today;
@@ -55,10 +68,19 @@ function routeNotificationTap(data: NotificationTapData): void {
  * The foreground handler is what makes a notification visible at all while the
  * app is open — without it iOS delivers it silently. All three calls are
  * no-ops on web.
+ *
+ * Everything except the foreground handler waits for a session. That is not
+ * just a guard: `getInitialResponse()` CONSUMES the stored tap, so not calling
+ * it while signed out is what preserves it. The tap is then routed the moment
+ * the user signs in, landing them on the suggestion screen instead of losing it.
  */
-function useNotificationTapRouting(): void {
+function useNotificationTapRouting(signedIn: boolean): void {
   useEffect(() => {
     notifications.setForegroundHandler();
+  }, []);
+
+  useEffect(() => {
+    if (!signedIn) return;
 
     void notifications.getInitialResponse().then((result) => {
       if (!result.ok) {
@@ -69,14 +91,47 @@ function useNotificationTapRouting(): void {
     });
 
     return notifications.addResponseListener(routeNotificationTap);
-  }, []);
+  }, [signedIn]);
 }
 
 export default function RootLayout() {
-  // The detect → candidate flow runs app-wide, independent of which screen is
-  // mounted. On web the detector subscription is a no-op by design.
-  useEffect(() => useWalkCandidateFlow.getState().startCandidateFlow(), []);
-  useNotificationTapRouting();
+  const status = useAuth((state) => state.status);
+  const restore = useAuth((state) => state.restore);
+  const pathname = usePathname();
+
+  const onAuthRoute = AUTH_ROUTES.has(pathname);
+  const signedIn = status === 'signed-in';
+
+  // reactCompiler is on: every hook here stays unconditional, so RootLayout
+  // never returns early.
+  useEffect(() => {
+    void restore();
+  }, [restore]);
+
+  useEffect(() => {
+    if (status !== 'restoring') void SplashScreen.hideAsync();
+  }, [status]);
+
+  // The gate. Imperative rather than <Redirect>, which needs a focused route
+  // and cannot run from a layout; the navigator stays mounted throughout.
+  useEffect(() => {
+    if (status === 'restoring') return;
+    if (status === 'signed-out' && !onAuthRoute) {
+      router.replace('/onboarding');
+      return;
+    }
+    if (status === 'signed-in' && onAuthRoute) router.replace('/');
+  }, [status, onAuthRoute]);
+
+  useNotificationTapRouting(signedIn);
+
+  // The detect → candidate flow runs app-wide but is useless without a session:
+  // a detection with no token cannot become a server candidate. On web the
+  // subscription is a no-op by design.
+  useEffect(() => {
+    if (!signedIn) return;
+    return useWalkCandidateFlow.getState().startCandidateFlow();
+  }, [signedIn]);
 
   return (
     <>
@@ -94,7 +149,19 @@ export default function RootLayout() {
         */}
         <Stack.Screen name="index" options={{ animationTypeForReplace: 'pop' }} />
         <Stack.Screen name="archive" options={{ animation: 'slide_from_right' }} />
+        {/* 로그아웃 replaces into onboarding, and that is a leave, not a push. */}
+        <Stack.Screen name="onboarding" options={{ animationTypeForReplace: 'pop' }} />
       </Stack>
+
+      {/*
+        What actually prevents the flash. It covers the restore window and the
+        frame between "signed out" and the replace landing on /onboarding — on
+        iOS it backs up the splash, and on web it is the only defence, since
+        expo-splash-screen's web build is a no-op.
+      */}
+      {status === 'restoring' || (status === 'signed-out' && !onAuthRoute) ? (
+        <View style={StyleSheet.absoluteFill} className="bg-parchment" pointerEvents="none" />
+      ) : null}
     </>
   );
 }
