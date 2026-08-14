@@ -78,6 +78,8 @@ type WalkCandidateFlowState = {
   openSuggestion(): Promise<void>;
   chooseKeep(): Promise<void>;
   chooseSkip(): Promise<void>;
+  /** Sign-out. Drops everything scoped to the user who just left. */
+  reset(): void;
 };
 
 // Module scope, not store state: Fast Refresh remounts the layout effect, and
@@ -451,6 +453,18 @@ export const useWalkCandidateFlow = create<WalkCandidateFlowState>((set, get) =>
 
     chooseSkip: async () => {
       await submitChoice('SKIPPED');
+    },
+
+    /**
+     * Sign-out. Bumping the run counter is what stops an openSuggestion still
+     * in flight from landing afterwards; `lastDetection` goes too because it
+     * carries the previous user's `candidateId`. The SQLite buffer itself is
+     * device-scoped and stays — a candidate belonging to another user already
+     * resolves to 404 on the server.
+     */
+    reset: () => {
+      suggestionRun += 1;
+      set({ lastDetection: null, suggestionPhase: 'idle', activeCandidate: null });
     },
   };
 });

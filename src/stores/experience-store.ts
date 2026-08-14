@@ -44,7 +44,16 @@ type ExperienceState = {
   loadExperience(experienceId: string): Promise<void>;
   loadList(): Promise<void>;
   probeListQuery(query: ListWalkExperiencesQuery): Promise<ListProbeResult>;
+  /** Sign-out. These rows belong to the user who just left. */
+  reset(): void;
 };
+
+/**
+ * Module scope, like the diary flow's generate counter: it survives Fast
+ * Refresh, and a list request already in flight when the user signs out must
+ * not land afterwards and repopulate the archive with the previous user's rows.
+ */
+let resetRun = 0;
 
 export const useExperiences = create<ExperienceState>((set, get) => {
   const append = (line: string) => {
@@ -109,16 +118,24 @@ export const useExperiences = create<ExperienceState>((set, get) => {
     loadList: async () => {
       if (listInFlight) return;
       listInFlight = true;
+      const run = resetRun;
       set({ listPhase: 'loading' });
 
       try {
         if (!(await ensureToken())) {
           append('list: no session');
-          set({ listPhase: 'error' });
+          if (run === resetRun) set({ listPhase: 'error' });
           return;
         }
 
         const fetched = await api.listWalkExperiences();
+        // A sign-out during the request wins: these rows are the previous
+        // user's and must not reach the archive.
+        if (run !== resetRun) {
+          append('list: superseded by sign-out');
+          return;
+        }
+
         if (fetched.ok) {
           set({ listPhase: 'ready', items: fetched.value });
           return;
@@ -150,6 +167,18 @@ export const useExperiences = create<ExperienceState>((set, get) => {
 
       append(`probe ${JSON.stringify(query)} → ${fetched.status ?? 'network'} — ${fetched.error}`);
       return { status: fetched.status, count: null, error: fetched.error };
+    },
+
+    reset: () => {
+      resetRun += 1;
+      listInFlight = false;
+      set({
+        phase: 'idle',
+        experienceId: null,
+        detail: null,
+        listPhase: 'idle',
+        items: [],
+      });
     },
   };
 });

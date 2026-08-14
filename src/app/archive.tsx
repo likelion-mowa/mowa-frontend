@@ -30,7 +30,7 @@ import {
 } from '@/lib/kst';
 import { colors, shadows } from '@/lib/theme';
 import { useExperiences } from '@/stores/experience-store';
-import { useProfile } from '@/stores/profile-store';
+import { useAuth } from '@/stores/auth-store';
 
 /**
  * 기록장 — the archive (prototype ArchiveScreen, src/App.tsx 1829-1968).
@@ -451,16 +451,17 @@ export default function ArchiveScreen() {
   const listPhase = useExperiences((state) => state.listPhase);
   const items = useExperiences((state) => state.items);
   const loadList = useExperiences((state) => state.loadList);
-  const nickname = useProfile((state) => state.nickname);
-  const loadProfile = useProfile((state) => state.loadProfile);
+  // The auth store already holds the user from restore/sign-in, so the header
+  // needs no fetch of its own. It stays null when /users/me was unreachable —
+  // the title falls back to neutral copy rather than showing an error.
+  const nickname = useAuth((state) => state.user?.nickname ?? null);
 
   const [mode, setMode] = useState<ViewMode>('grid');
   const [period, setPeriod] = useState<PeriodFilter>('all');
 
   useEffect(() => {
     void loadList();
-    void loadProfile();
-  }, [loadList, loadProfile]);
+  }, [loadList]);
 
   const today = useMemo(() => kstNow(Date.now()), []);
   const filtered = useMemo(
