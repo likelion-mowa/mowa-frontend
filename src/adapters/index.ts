@@ -11,4 +11,5 @@ export { notifications } from './notifications';
 export { location } from './location';
 export { storage } from './storage';
 export { secureStore } from './secure-store';
+export { systemSettings } from './system-settings';
 export { photoPicker } from './photo-picker';

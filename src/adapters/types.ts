@@ -181,6 +181,14 @@ export interface PhotoPickerPort {
   /** Resolves `null` when the user cancelled the picker — that is not an error. */
   pickFromLibrary(): Promise<AdapterResult<PickedPhoto | null>>;
   captureWithCamera(): Promise<AdapterResult<PickedPhoto | null>>;
+  /**
+   * Reads the camera permission WITHOUT prompting, for the permissions screen.
+   *
+   * There is no library equivalent on purpose: the library path runs through
+   * PHPickerViewController out of process, so this app holds no photo-library
+   * permission at all and a row claiming otherwise would be fiction.
+   */
+  getCameraPermission(): Promise<AdapterResult<PermissionState>>;
 }
 
 export interface StoragePort {
