@@ -289,6 +289,14 @@ export type WalkExperienceListItem = {
   emotions: Emotion[];
   situation: Situation | null;
   tags: string[];
+  /**
+   * NOT in the spec today — requested of the backend, see
+   * docs/api-implementation.md. The archive's 누적 시간 stat and the calendar's
+   * per-day minutes need a duration per row, and the list response carries
+   * none; fetching every detail to add it up is not worth the round trips.
+   * Optional so the UI degrades to "—" until the field ships.
+   */
+  durationSeconds?: number;
 };
 
 /** Full shape returned by the detail endpoint (기능 7). */

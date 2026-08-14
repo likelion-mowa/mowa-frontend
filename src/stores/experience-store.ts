@@ -1,16 +1,34 @@
 import { create } from 'zustand';
 
 import { api, hasAccessToken } from '@/api/client';
-import type { WalkExperienceDetail } from '@/api/types';
+import type {
+  ListWalkExperiencesQuery,
+  WalkExperienceDetail,
+  WalkExperienceListItem,
+} from '@/api/types';
 import { useWalkCandidateFlow } from '@/stores/walk-candidate-store';
 
 /**
- * Read side of walk_experiences (기능 7 detail today; the archive list task
- * will extend this store). Screens read this store; only the store talks to
- * the api client.
+ * Read side of walk_experiences: the archive list (기능 6) and one detail
+ * record (기능 7). Screens read this store; only the store talks to the api
+ * client.
+ *
+ * The list is always fetched unfiltered. The MVP has no pagination, and the
+ * stats, the home strip and the calendar all need every row anyway, so the
+ * archive's period tabs filter what is already in memory (KST, same boundaries
+ * the server uses) instead of paying for a redundant request that can fail on
+ * its own. `probeListQuery` keeps the server-side filters honest — see /debug.
  */
 
 export type ExperiencePhase = 'idle' | 'loading' | 'ready' | 'not-found' | 'error';
+export type ListPhase = 'idle' | 'loading' | 'ready' | 'error';
+
+/** What /debug reports for a raw query; never touches the screens' list. */
+export type ListProbeResult = {
+  status: number | null;
+  count: number | null;
+  error: string | null;
+};
 
 type ExperienceState = {
   phase: ExperiencePhase;
@@ -19,7 +37,13 @@ type ExperienceState = {
   detail: WalkExperienceDetail | null;
   log: string[];
 
+  listPhase: ListPhase;
+  /** Whole list, server-sorted `startedAt` DESC. */
+  items: WalkExperienceListItem[];
+
   loadExperience(experienceId: string): Promise<void>;
+  loadList(): Promise<void>;
+  probeListQuery(query: ListWalkExperiencesQuery): Promise<ListProbeResult>;
 };
 
 export const useExperiences = create<ExperienceState>((set, get) => {
@@ -35,11 +59,18 @@ export const useExperiences = create<ExperienceState>((set, get) => {
     return useWalkCandidateFlow.getState().loginWithEnvCredentials();
   };
 
+  // Module-scope rather than state: a second concurrent fetch would be pure
+  // waste, and re-rendering on "a fetch is running" is what listPhase is for.
+  let listInFlight = false;
+
   return {
     phase: 'idle',
     experienceId: null,
     detail: null,
     log: [],
+
+    listPhase: 'idle',
+    items: [],
 
     loadExperience: async (experienceId) => {
       set({ phase: 'loading', experienceId, detail: null });
@@ -68,6 +99,57 @@ export const useExperiences = create<ExperienceState>((set, get) => {
       }
       append(`detail: GET FAILED (${fetched.status ?? 'network'}) — ${fetched.error}`);
       set({ phase: 'error' });
+    },
+
+    /**
+     * Home and the archive both call this on mount. Refetching every time is
+     * deliberate: the payload is small, and a cache would go stale the moment
+     * the diary flow saves a new experience.
+     */
+    loadList: async () => {
+      if (listInFlight) return;
+      listInFlight = true;
+      set({ listPhase: 'loading' });
+
+      try {
+        if (!(await ensureToken())) {
+          append('list: no session');
+          set({ listPhase: 'error' });
+          return;
+        }
+
+        const fetched = await api.listWalkExperiences();
+        if (fetched.ok) {
+          set({ listPhase: 'ready', items: fetched.value });
+          return;
+        }
+
+        append(`list: GET FAILED (${fetched.status ?? 'network'}) — ${fetched.error}`);
+        set({ listPhase: 'error' });
+      } finally {
+        listInFlight = false;
+      }
+    },
+
+    /**
+     * Runs a raw list query and reports the outcome without disturbing
+     * `items`. The product filters client-side, so this is the only place the
+     * spec's from/to/tag rules — including its four 400s — get exercised
+     * against a server. /debug section 8 is the caller.
+     */
+    probeListQuery: async (query) => {
+      if (!(await ensureToken())) {
+        return { status: null, count: null, error: '세션 없음' };
+      }
+
+      const fetched = await api.listWalkExperiences(query);
+      if (fetched.ok) {
+        append(`probe ${JSON.stringify(query)} → 200 (${fetched.value.length}건)`);
+        return { status: 200, count: fetched.value.length, error: null };
+      }
+
+      append(`probe ${JSON.stringify(query)} → ${fetched.status ?? 'network'} — ${fetched.error}`);
+      return { status: fetched.status, count: null, error: fetched.error };
     },
   };
 });

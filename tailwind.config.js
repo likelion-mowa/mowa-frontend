@@ -26,9 +26,21 @@ module.exports = {
         sage: {
           DEFAULT: palette.sage,
           light: palette.sageLight,
+          lime: palette.sageLime,
           pale: palette.sagePale,
           dark: palette.sageDark,
           deep: palette.sageDeep,
+        },
+        // Photo-less tiles and month labels in the archive; the speech bubble
+        // on home. Cooler than the sage family on purpose — the prototype uses
+        // them as surfaces behind sage content, not as sage tints.
+        mint: {
+          DEFAULT: palette.mint,
+          pale: palette.mintPale,
+        },
+        bubble: {
+          DEFAULT: palette.bubble,
+          ink: palette.bubbleInk,
         },
         parchment: {
           DEFAULT: palette.parchment,

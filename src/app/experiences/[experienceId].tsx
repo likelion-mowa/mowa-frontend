@@ -22,8 +22,12 @@ import { useExperiences } from '@/stores/experience-store';
  *
  * The prototype's edit/delete header icons are omitted: 기능 8 (수정·삭제) is a
  * later task and dead buttons would be worse than none — flagged for team
- * review in the PR. Back goes home explicitly; the diary flow reaches this
- * screen via replace, so there is no meaningful stack behind it.
+ * review in the PR.
+ *
+ * Back is driven by a `from` param, mirroring the prototype's `fromArchive`
+ * flag. `router.canGoBack()` cannot decide it: the diary flow pushes its own
+ * screens and then replaces into this one, so a stack entry exists but leads
+ * back into a finished flow.
  */
 
 function Badge({ label, tone }: { label: string; tone: 'green' | 'neutral' }) {
@@ -40,7 +44,7 @@ function Badge({ label, tone }: { label: string; tone: 'green' | 'neutral' }) {
 }
 
 export default function ExperienceDetailScreen() {
-  const { experienceId } = useLocalSearchParams<{ experienceId: string }>();
+  const { experienceId, from } = useLocalSearchParams<{ experienceId: string; from?: string }>();
   const phase = useExperiences((state) => state.phase);
   const loadedId = useExperiences((state) => state.experienceId);
   const detail = useExperiences((state) => state.detail);
@@ -52,12 +56,12 @@ export default function ExperienceDetailScreen() {
     }
   }, [experienceId, loadExperience]);
 
-  const goHome = () => router.replace('/');
+  const goBack = () => router.replace(from === 'archive' ? '/archive' : '/');
 
   if (phase === 'loading' || phase === 'idle' || loadedId !== experienceId) {
     return (
       <SafeAreaView className="flex-1 bg-white">
-        <ScreenHeader onBack={goHome} />
+        <ScreenHeader onBack={goBack} />
         <View className="flex-1 items-center justify-center">
           <ActivityIndicator color={colors.sage} />
         </View>
@@ -68,7 +72,7 @@ export default function ExperienceDetailScreen() {
   if (phase !== 'ready' || detail === null) {
     return (
       <SafeAreaView className="flex-1 bg-parchment">
-        <ScreenHeader onBack={goHome} />
+        <ScreenHeader onBack={goBack} />
         <View className="flex-1 items-center justify-center px-8">
           <Text className="text-lg font-bold text-ink">
             {phase === 'not-found' ? '기록을 찾을 수 없어요' : '기록을 불러오지 못했어요'}
@@ -79,7 +83,10 @@ export default function ExperienceDetailScreen() {
               : '네트워크 상태를 확인하고 다시 시도해주세요.'}
           </Text>
           <View className="mt-8 w-full">
-            <PrimaryButton label="홈으로 돌아가기" onPress={goHome} />
+            <PrimaryButton
+              label={from === 'archive' ? '기록장으로 돌아가기' : '홈으로 돌아가기'}
+              onPress={goBack}
+            />
           </View>
         </View>
       </SafeAreaView>
@@ -104,7 +111,8 @@ export default function ExperienceDetailScreen() {
           <View className="absolute left-0 right-0 top-0 flex-row items-center px-3 py-1">
             <Pressable
               accessibilityRole="button"
-              onPress={goHome}
+              accessibilityLabel="뒤로"
+              onPress={goBack}
               className="rounded-full bg-black/30 p-2 active:opacity-70"
               hitSlop={8}>
               <IcChevronLeft size={22} color={colors.white} />
@@ -120,7 +128,7 @@ export default function ExperienceDetailScreen() {
         </View>
       ) : (
         <View className="bg-parchment">
-          <ScreenHeader onBack={goHome} />
+          <ScreenHeader onBack={goBack} />
           <View className="mx-5 mb-2 h-24 items-center justify-center rounded-2xl border border-sage/20 bg-sage-pale/50">
             <IcImage size={28} color={colors.sage} />
             <Text className="mt-1 text-xs text-sage">사진 없음</Text>

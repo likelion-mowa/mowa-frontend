@@ -22,6 +22,7 @@ export function ScreenHeader({
     <View className="flex-row items-center px-3 py-2">
       <Pressable
         accessibilityRole="button"
+        accessibilityLabel="뒤로"
         onPress={onBack}
         className="p-2 active:opacity-70"
         hitSlop={8}>

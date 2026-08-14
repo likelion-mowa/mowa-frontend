@@ -81,7 +81,20 @@ export default function RootLayout() {
   return (
     <>
       <StatusBar style="auto" />
-      <Stack screenOptions={{ headerShown: false }} />
+      <Stack screenOptions={{ headerShown: false }}>
+        {/*
+          Home's glass bar pushes into the archive (forward: slide from
+          right, the native-stack default for `router.push`). Every existing
+          `router.replace('/')` / `<Redirect href="/">` in the app — the
+          archive's "홈으로" button, the diary flow's abort guards, its own
+          "홈으로 돌아가기" — is a "leave and go back" action, never a forward
+          one, so replacing INTO home should animate as a pop (reverse
+          slide) instead of native-stack's default replace animation, which
+          mimics another forward push.
+        */}
+        <Stack.Screen name="index" options={{ animationTypeForReplace: 'pop' }} />
+        <Stack.Screen name="archive" options={{ animation: 'slide_from_right' }} />
+      </Stack>
     </>
   );
 }

@@ -13,9 +13,9 @@ import { useDiaryFlow } from '@/stores/diary-flow-store';
  * bounces in like the prototype's `bounce-in` keyframe (RN Animated spring —
  * NativeWind's animate-* classes are unverified on this stack).
  *
- * The prototype's primary button says "기록장 보기", but the archive is a later
- * task — until it exists the button reads "일기 보기" and opens the detail
- * screen the flow just created (flagged for team review in the PR).
+ * Both buttons now match the prototype: 기록장 보기 opens the archive, where the
+ * walk just saved is the newest tile. (While the archive did not exist, the
+ * primary button read "일기 보기" and opened the detail directly.)
  */
 export default function DiaryDoneScreen() {
   const walk = useDiaryFlow((state) => state.walk);
@@ -62,11 +62,7 @@ export default function DiaryDoneScreen() {
         </Text>
 
         <View className="mt-8 w-full">
-          <PrimaryButton
-            glow
-            label="일기 보기"
-            onPress={() => router.replace(`/experiences/${experienceId}`)}
-          />
+          <PrimaryButton glow label="기록장 보기" onPress={() => router.replace('/archive')} />
           <Pressable
             accessibilityRole="button"
             onPress={() => router.replace('/')}

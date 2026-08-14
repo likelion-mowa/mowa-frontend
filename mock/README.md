@@ -80,6 +80,10 @@ TypeScript를 Node에서 그대로 읽기 위해 npm 스크립트가 `--experime
 - **사진 업로드가 없습니다.** 명세대로 Object Storage는 별도이고 여기선 `photoUrl`
   문자열만 받습니다. 임의의 URL을 넣으면 됩니다.
 - **페이지네이션이 없습니다.** MVP 명세와 동일합니다.
+- **목록 응답에 `durationSeconds`가 없습니다.** 명세 그대로입니다. 기록장의
+  "누적 시간" 합산 로직을 로컬에서 확인하고 싶을 때만 `MOCK_LIST_DURATION=1 npm run mock`
+  으로 켜세요. 이 스위치를 켜고 통과했다고 해서 실제 백엔드가 필드를 준다는 뜻은
+  아닙니다 (백엔드에 추가 요청 중 — `docs/api-implementation.md` 공백 8).
 - 상태 전이는 `DETECTED → SUGGESTED → RECORDING | SKIPPED`만 허용합니다.
   명세 다이어그램을 그대로 따랐으므로 `DETECTED → RECORDING` 직행은 400입니다.
 

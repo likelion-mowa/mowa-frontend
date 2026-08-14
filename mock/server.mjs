@@ -533,6 +533,15 @@ app.post(api('/experience-drafts/:draftId/ai-generation'), authenticate, (req, r
 // 기능 5·6·7·8 — 산책 경험
 // ---------------------------------------------------------------------------
 
+/**
+ * MOCK_LIST_DURATION=1 adds `durationSeconds` to every list row. It is OFF by
+ * default because the spec's 기능 6 response does not include it — this switch
+ * exists only to exercise the archive's 누적 시간 sum, which the client asked
+ * the backend to make possible (docs/api-implementation.md 공백 8). Do not
+ * treat a green run with it on as evidence the real backend sends the field.
+ */
+const LIST_DURATION = process.env.MOCK_LIST_DURATION === '1';
+
 const listItemView = (e) => ({
   experienceId: e.id,
   photoUrl: e.photoUrl,
@@ -543,6 +552,7 @@ const listItemView = (e) => ({
   emotions: emotionsOfExperience(e.id),
   situation: e.situation,
   tags: tagsOfExperience(e.id),
+  ...(LIST_DURATION ? { durationSeconds: e.durationSeconds } : {}),
 });
 
 const detailView = (e) => ({
