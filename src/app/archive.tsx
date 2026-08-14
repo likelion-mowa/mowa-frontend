@@ -473,6 +473,7 @@ export default function ArchiveScreen() {
   );
 
   const loading = listPhase !== 'ready' && listPhase !== 'error' && items.length === 0;
+  const unknown = listPhase === 'error';
 
   return (
     <SafeAreaView edges={['top']} className="flex-1 bg-white">
@@ -503,12 +504,14 @@ export default function ArchiveScreen() {
           </View>
         </View>
 
+        {/* A failed load knows nothing, so it says nothing: zeros here would
+            read as "you have never walked". */}
         <View className="mb-4 flex-row">
-          <Stat value={`${items.length}회`} label="누적 산책" />
+          <Stat value={unknown ? '—' : `${items.length}회`} label="누적 산책" />
           <View className="w-px bg-line" />
-          <Stat value={`${thisMonthCount}회`} label="이번 달" />
+          <Stat value={unknown ? '—' : `${thisMonthCount}회`} label="이번 달" />
           <View className="w-px bg-line" />
-          <Stat value={totalHoursLabel(items)} label="누적 시간" />
+          <Stat value={unknown ? '—' : totalHoursLabel(items)} label="누적 시간" />
         </View>
 
         <ViewToggle mode={mode} onChange={setMode} />

@@ -111,6 +111,7 @@ export default function ExperienceDetailScreen() {
           <View className="absolute left-0 right-0 top-0 flex-row items-center px-3 py-1">
             <Pressable
               accessibilityRole="button"
+              accessibilityLabel="뒤로"
               onPress={goBack}
               className="rounded-full bg-black/30 p-2 active:opacity-70"
               hitSlop={8}>
