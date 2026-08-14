@@ -21,6 +21,7 @@ import {
   endpoints,
 } from '@/api/types';
 import { useDiagnostics } from '@/stores/diagnostics-store';
+import { useDiaryFlow } from '@/stores/diary-flow-store';
 import { useWalkCandidateFlow } from '@/stores/walk-candidate-store';
 
 /**
@@ -74,6 +75,7 @@ export default function SmokeScreen() {
   const state = useDiagnostics();
   const { append, set } = state;
   const flow = useWalkCandidateFlow();
+  const diary = useDiaryFlow();
 
   /** Unwraps an AdapterResult into the log, returning the value on success. */
   const run = useCallback(
@@ -486,6 +488,27 @@ export default function SmokeScreen() {
             that a walk-less environment otherwise cannot reach.
           </Text>
           {flow.log.map((line, i) => (
+            <Text key={i} className="font-mono text-xs text-neutral-700">
+              {line}
+            </Text>
+          ))}
+        </Section>
+
+        <Section title="7 · Diary flow (drafts + AI generation)">
+          <Row label="draftId" value={diary.draftId ?? '—'} />
+          <Row label="generation" value={diary.generationPhase} />
+          <Row label="experienceId" value={diary.experienceId ?? '—'} />
+          <Row label="force AI failure" value={diary.forceAiFailure ? 'ON' : 'off'} />
+          <Button
+            title={`Force AI failure: turn ${diary.forceAiFailure ? 'OFF' : 'ON'}`}
+            onPress={() => diary.setForceAiFailure(!diary.forceAiFailure)}
+          />
+          <Text className="mt-2 text-xs text-neutral-500">
+            The toggle makes the next AI generation send the mock&apos;s ?fail=1 switch —
+            the only way to see the FAILED branch in-app, because the mock&apos;s
+            generation is deterministic and instant. Product code never sets it.
+          </Text>
+          {diary.log.map((line, i) => (
             <Text key={i} className="font-mono text-xs text-neutral-700">
               {line}
             </Text>
