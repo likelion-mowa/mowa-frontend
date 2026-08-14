@@ -10,3 +10,4 @@ export { health } from './health';
 export { notifications } from './notifications';
 export { location } from './location';
 export { storage } from './storage';
+export { photoPicker } from './photo-picker';
