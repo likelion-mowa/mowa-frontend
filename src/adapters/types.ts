@@ -185,6 +185,44 @@ export interface StoragePort {
   clear(): Promise<AdapterResult<true>>;
 }
 
+/**
+ * Small key-value store that survives a relaunch, backed by the OS keychain on
+ * iOS and localStorage on web.
+ *
+ * Separate from StoragePort on purpose: that one is a walk-record repository
+ * (`DetectedWalk` rows), not a KV store, and widening it would mean a new
+ * SQLite table plus a `PRAGMA user_version` bump on every installed device.
+ *
+ * It also carries two values that are NOT secrets — the detection and
+ * notification preferences. A second mechanism just for them would cost another
+ * dependency (no AsyncStorage here) to save two keychain entries, which is the
+ * worse trade.
+ */
+export interface SecureStorePort {
+  /** True when backed by the OS keychain. False for the web fallback. */
+  readonly isSecure: boolean;
+  /** Resolves `null` when the key was never written — that is not an error. */
+  getItem(key: string): Promise<AdapterResult<string | null>>;
+  setItem(key: string, value: string): Promise<AdapterResult<true>>;
+  deleteItem(key: string): Promise<AdapterResult<true>>;
+}
+
+/**
+ * Keys owned by SecureStorePort. Versioned like `mowa.walks.v2` so a shape
+ * change abandons the old value instead of misreading it.
+ */
+export const SECURE_KEYS = {
+  authToken: 'mowa.auth.token.v1',
+  detectionEnabled: 'mowa.detection.enabled.v1',
+  notificationsEnabled: 'mowa.notification.enabled.v1',
+} as const;
+
+/** Opens the OS settings app for this app. iOS only. */
+export interface SystemSettingsPort {
+  readonly isAvailable: boolean;
+  open(): Promise<AdapterResult<true>>;
+}
+
 /** Normalizes an unknown throwable into the AdapterResult error branch. */
 export function toError(error: unknown): { ok: false; error: string } {
   if (error instanceof Error) return { ok: false, error: `${error.name}: ${error.message}` };

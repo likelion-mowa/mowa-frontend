@@ -10,4 +10,5 @@ export { health } from './health';
 export { notifications } from './notifications';
 export { location } from './location';
 export { storage } from './storage';
+export { secureStore } from './secure-store';
 export { photoPicker } from './photo-picker';
