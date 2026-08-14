@@ -1,6 +1,7 @@
 import { useCallback, useEffect } from 'react';
 import { Platform, Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { Link } from 'expo-router';
 
 import {
   health,
@@ -468,9 +469,18 @@ export default function SmokeScreen() {
               });
             }}
           />
+          <Link href="/walk" asChild>
+            <Pressable className="mt-2 rounded-lg bg-neutral-200 px-4 py-3 active:opacity-70">
+              <Text className="text-center text-sm font-semibold text-neutral-600">
+                Open /walk — suggestion screen
+              </Text>
+            </Pressable>
+          </Link>
           <Text className="mt-2 text-xs text-neutral-500">
             Calls the store handler directly, so it works on web too. On iOS,
             emitTestEvent above reaches the same flow through the real subscription.
+            The /walk link is the only way to re-enter the suggestion screen without
+            walking again — a tapped notification is gone from Notification Center.
             The second button is the shape a real detection now has — the detector
             fires once, after the walk ended — so it exercises the end-value PATCH
             that a walk-less environment otherwise cannot reach.
