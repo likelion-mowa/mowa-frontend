@@ -48,6 +48,11 @@ const MUST_BE_PRESENT = [
   ['/walk button 저장할게요', '저장할게요'],
   ['/walk button 괜찮아요', '괜찮아요'],
   ['diary photo headline', '사진이 있나요?'],
+  // Guards the option-picker extraction: the companion/emotion/situation UI now
+  // lives in components/option-picker.tsx, and this is the only string unique to
+  // the screen that consumes it. '생각에 잠긴' would NOT catch a regression here
+  // — it comes from api/types.ts and ships even if this screen leaves the graph.
+  ['diary context question', '함께였나요?'],
   ['diary generating headline', '산책 기억을 만들고 있어요'],
   ['diary failure headline', '산책 기억을 만들지 못했어요'],
   ['diary preview header', '산책 기억 미리보기'],
