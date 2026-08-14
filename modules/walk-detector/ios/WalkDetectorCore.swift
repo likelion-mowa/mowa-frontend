@@ -608,7 +608,19 @@ final class WalkDetectorCore: NSObject {
 
             guard delta >= Double(self.thresholdSteps) else { return }
 
-            // MOWA: the live layer already told the user about this walk.
+            // MOWA: the live layer is mid-walk, or holding an end that is about
+            // to be confirmed. It will notify within the debounce, with the real
+            // step count for THIS walk — the observer would only beat it to the
+            // punch with a 2-hour delta and burn the shared cooldown, which is
+            // exactly what happened on 2026-08-14 (observer 11:54:28, live
+            // suppressed 11:55:27 reason=cooldown). The net exists for a live
+            // layer that is dead, not one that is working.
+            if self.walkStartedAt != nil {
+                Self.log.notice("notification_suppressed reason=live-pending")
+                return
+            }
+
+            // The live layer already told the user about this walk.
             // Known gap: if the keepalive dies BETWEEN two walks inside one
             // fire interval, the second walk is absorbed here — accepted; the
             // net targets "keepalive silently dead for hours", not that race.
