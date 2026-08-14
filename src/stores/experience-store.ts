@@ -1,11 +1,19 @@
 import { create } from 'zustand';
 
-import { api, hasAccessToken } from '@/api/client';
+import { api, hasAccessToken, type ApiResult } from '@/api/client';
 import type {
   ListWalkExperiencesQuery,
   WalkExperienceDetail,
   WalkExperienceListItem,
 } from '@/api/types';
+import {
+  buildExperiencePatch,
+  isEmptyPatch,
+  listItemFields,
+  parseTagsInput,
+  validateTitleAndTags,
+  type ExperienceEditDraft,
+} from '@/lib/experience-input';
 
 /**
  * Read side of walk_experiences: the archive list (기능 6) and one detail
@@ -17,10 +25,31 @@ import type {
  * archive's period tabs filter what is already in memory (KST, same boundaries
  * the server uses) instead of paying for a redundant request that can fail on
  * its own. `probeListQuery` keeps the server-side filters honest — see /debug.
+ *
+ * The write side (기능 8) edits and deletes one record. Both keep `detail` and
+ * the cached `items` correct WITHOUT re-fetching: home and the archive load the
+ * list once per mount, so a stale row would survive until the next cold entry,
+ * and whether `router.replace` remounts an already-stacked screen is not
+ * something to bet correctness on. See `updateExperience` for why applying the
+ * request (rather than the response) is sound.
  */
 
 export type ExperiencePhase = 'idle' | 'loading' | 'ready' | 'not-found' | 'error';
 export type ListPhase = 'idle' | 'loading' | 'ready' | 'error';
+export type EditPhase = 'idle' | 'saving';
+export type DeletePhase = 'idle' | 'deleting';
+
+/**
+ * Shaped like auth-store's `signInMessage`. A network failure gets our own
+ * copy; anything else surfaces the server's `message`, because the client has
+ * no way to know which of 기능 8's ten validation rules fired and the server's
+ * Korean text is the only accurate thing to show. 404 never reaches here — it
+ * is a state change, not a message.
+ */
+function writeFailureMessage(failure: Extract<ApiResult<unknown>, { ok: false }>): string {
+  if (failure.status === null) return '서버에 연결할 수 없어요. 잠시 후 다시 시도해주세요.';
+  return failure.error;
+}
 
 /** What /debug reports for a raw query; never touches the screens' list. */
 export type ListProbeResult = {
@@ -40,9 +69,21 @@ type ExperienceState = {
   /** Whole list, server-sorted `startedAt` DESC. */
   items: WalkExperienceListItem[];
 
+  editPhase: EditPhase;
+  /** Client-validation or server failure message for the edit step. */
+  editError: string | null;
+  deletePhase: DeletePhase;
+  deleteError: string | null;
+
   loadExperience(experienceId: string): Promise<void>;
   loadList(): Promise<void>;
   probeListQuery(query: ListWalkExperiencesQuery): Promise<ListProbeResult>;
+  /** True when the record now matches the draft — including "nothing changed". */
+  updateExperience(experienceId: string, draft: ExperienceEditDraft): Promise<boolean>;
+  /** True when the record is gone, which includes it having been gone already. */
+  deleteExperience(experienceId: string): Promise<boolean>;
+  /** 취소 discards a failed write's message along with its values. */
+  clearWriteErrors(): void;
   /** Sign-out. These rows belong to the user who just left. */
   reset(): void;
 };
@@ -74,6 +115,11 @@ export const useExperiences = create<ExperienceState>((set, get) => {
 
     listPhase: 'idle',
     items: [],
+
+    editPhase: 'idle',
+    editError: null,
+    deletePhase: 'idle',
+    deleteError: null,
 
     loadExperience: async (experienceId) => {
       set({ phase: 'loading', experienceId, detail: null });
@@ -163,6 +209,109 @@ export const useExperiences = create<ExperienceState>((set, get) => {
       return { status: fetched.status, count: null, error: fetched.error };
     },
 
+    /**
+     * 기능 8 수정. The draft is the editor's local working copy; only what
+     * actually differs from `detail` is sent.
+     */
+    updateExperience: async (experienceId, draft) => {
+      const current = get().detail;
+      if (current === null || get().experienceId !== experienceId) {
+        append(`edit: ${experienceId} not loaded`);
+        set({ editError: '기록을 불러오지 못했어요.' });
+        return false;
+      }
+
+      const invalid = validateTitleAndTags(draft.title, parseTagsInput(draft.tagsInput));
+      if (invalid !== null) {
+        set({ editError: invalid });
+        return false;
+      }
+
+      const patch = buildExperiencePatch(current, draft);
+      if (isEmptyPatch(patch)) {
+        // The spec does not define an empty PATCH, and a round trip that can
+        // only fail is worse than no round trip. The record already matches.
+        append('edit: no change, skipped');
+        set({ editError: null });
+        return true;
+      }
+
+      set({ editPhase: 'saving', editError: null });
+      const saved = await api.updateWalkExperience(experienceId, patch);
+
+      if (saved.ok) {
+        append(`edit: ${experienceId} → 200 (${Object.keys(patch).join(', ')})`);
+        set((state) => ({
+          editPhase: 'idle',
+          editError: null,
+          // The patch, not the response: the spec has no response body for this
+          // endpoint, and "omit = keep, sent = set" makes the resulting record
+          // fully determined by the request. `patch` cannot carry a snapshot
+          // column — `UpdateWalkExperienceRequest` has no such key — which is
+          // exactly why spreading it over `detail` is safe. Never spread the
+          // other way.
+          detail:
+            state.experienceId === experienceId && state.detail !== null
+              ? { ...state.detail, ...patch }
+              : state.detail,
+          items: state.items.map((item) =>
+            item.experienceId === experienceId ? { ...item, ...listItemFields(patch) } : item,
+          ),
+        }));
+        return true;
+      }
+
+      // Gone or foreign. The phase guard tears the editor down and the shipped
+      // not-found card already says the right thing.
+      if (saved.status === 404) {
+        append(`edit: ${experienceId} not found`);
+        set((state) => ({
+          editPhase: 'idle',
+          editError: null,
+          phase: 'not-found',
+          detail: null,
+          items: state.items.filter((item) => item.experienceId !== experienceId),
+        }));
+        return false;
+      }
+
+      append(`edit: PATCH FAILED (${saved.status ?? 'network'}) — ${saved.error}`);
+      set({ editPhase: 'idle', editError: writeFailureMessage(saved) });
+      return false;
+    },
+
+    /** 기능 8 삭제. Soft delete server-side; locally the row simply stops existing. */
+    deleteExperience: async (experienceId) => {
+      set({ deletePhase: 'deleting', deleteError: null });
+      const removed = await api.deleteWalkExperience(experienceId);
+
+      // 404 is success: by spec an already-deleted (or never-existing) record
+      // answers 404, and the caller's intent — "this must be gone" — holds.
+      if (removed.ok || removed.status === 404) {
+        append(`delete: ${experienceId} → ${removed.ok ? '200' : '404 (already gone)'}`);
+        set((state) => ({
+          deletePhase: 'idle',
+          deleteError: null,
+          items: state.items.filter((item) => item.experienceId !== experienceId),
+          // Reset rather than 'not-found': the user deleted this on purpose, so
+          // flashing 기록을 찾을 수 없어요 for the frame before the navigation
+          // lands would read as an error. The screen paints its neutral spinner
+          // instead. Its load effect keys on the ROUTE param, which has not
+          // changed, so nothing re-fetches the deleted id.
+          ...(state.experienceId === experienceId
+            ? { phase: 'idle' as ExperiencePhase, experienceId: null, detail: null }
+            : {}),
+        }));
+        return true;
+      }
+
+      append(`delete: DELETE FAILED (${removed.status ?? 'network'}) — ${removed.error}`);
+      set({ deletePhase: 'idle', deleteError: writeFailureMessage(removed) });
+      return false;
+    },
+
+    clearWriteErrors: () => set({ editError: null, deleteError: null }),
+
     reset: () => {
       resetRun += 1;
       listInFlight = false;
@@ -172,6 +321,10 @@ export const useExperiences = create<ExperienceState>((set, get) => {
         detail: null,
         listPhase: 'idle',
         items: [],
+        editPhase: 'idle',
+        editError: null,
+        deletePhase: 'idle',
+        deleteError: null,
       });
     },
   };
