@@ -18,6 +18,12 @@ declare class WalkDetectorModule extends NativeModule<WalkDetectorModuleEvents> 
    */
   start(mechanism: WalkMechanism | null): Promise<boolean>;
   stop(): Promise<boolean>;
+  /**
+   * Withholds the walk notification without stopping detection. Separate from
+   * `start` so that function's arity — and its argument marshalling, which no
+   * gate here verifies — stays untouched.
+   */
+  setNotificationsEnabled(enabled: boolean): Promise<boolean>;
   queryHistory(sinceMs: number): Promise<WalkEvent[]>;
   getDiagnostics(): Promise<WalkDetectorDiagnostics>;
   /** Fires one synthetic `onWalkDetected`, to verify event wiring before F1 exists. */

@@ -57,6 +57,14 @@ module.exports = {
           DEFAULT: palette.line,
           light: palette.lineLight,
         },
+        // Settings icon tiles. The prototype gives each row's tile its own
+        // pastel; these two are the non-sage ones (bell, shield).
+        amber: {
+          pale: palette.amberPale,
+        },
+        indigo: {
+          pale: palette.indigoPale,
+        },
       },
     },
   },

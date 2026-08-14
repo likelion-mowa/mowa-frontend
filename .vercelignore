@@ -19,3 +19,9 @@ web-build
 # Dev-only — not part of the web build.
 mock
 docs
+
+# Local secrets and, more importantly, the local API base URL. Login now
+# depends on it, so an uploaded .env would inline http://localhost:4000 into
+# the judge-facing bundle and every request would hit their own machine.
+.env
+.env.*

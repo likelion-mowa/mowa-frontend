@@ -49,6 +49,9 @@ final class WalkDetectorCore: NSObject {
         // 2026-08-13: 180 s — long enough to absorb crosswalk waits).
         static let endDebounce = "walk.endDebounceSeconds"
         static let deepLinkPath = "walk.deepLinkPath"
+        // MOWA: 설정 > 기록 제안 알림. Detection keeps running when this is off;
+        // only the notification is withheld.
+        static let notificationsEnabled = "walk.notificationsEnabled"
         static let lastNotifiedAt = "walk.lastNotifiedAt"
         static let lastSeenSteps = "walk.lastSeenSteps"
         // MOWA: safety-net arbitration state — see handleObserverFired.
@@ -131,6 +134,21 @@ final class WalkDetectorCore: NSObject {
     }
     private var deepLinkPath: String {
         UserDefaults.standard.string(forKey: Keys.deepLinkPath) ?? "/walk"
+    }
+    /// 미설정이면 true. `bool(forKey:)` alone would read a missing key as false
+    /// and silently mute every existing install and every fresh one, which is
+    /// exactly the silent-failure class this module is written to avoid.
+    var notificationsEnabled: Bool {
+        get {
+            guard UserDefaults.standard.object(forKey: Keys.notificationsEnabled) != nil else {
+                return true
+            }
+            return UserDefaults.standard.bool(forKey: Keys.notificationsEnabled)
+        }
+        set {
+            UserDefaults.standard.set(newValue, forKey: Keys.notificationsEnabled)
+            Self.log.notice("notifications_enabled=\(newValue)")
+        }
     }
 
     private override init() {
@@ -470,6 +488,15 @@ final class WalkDetectorCore: NSObject {
     }
 
     private func postNotification(steps: Int, issuedAt: Date) {
+        // The single gate for 설정 > 기록 제안 알림. Both callers (the live
+        // end-of-walk path and the observer safety net) come through here, so
+        // one guard covers the whole feature. Detection itself is unaffected —
+        // the candidate is still created when the app next runs.
+        guard notificationsEnabled else {
+            Self.log.notice("notification_suppressed steps=\(steps)")
+            return
+        }
+
         let content = UNMutableNotificationContent()
         content.title = "걷기가 감지되었습니다"
         content.body = "\(steps)걸음 · 탭하면 걷기 화면으로 이동합니다"

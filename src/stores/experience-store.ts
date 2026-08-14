@@ -6,7 +6,6 @@ import type {
   WalkExperienceDetail,
   WalkExperienceListItem,
 } from '@/api/types';
-import { useWalkCandidateFlow } from '@/stores/walk-candidate-store';
 
 /**
  * Read side of walk_experiences: the archive list (기능 6) and one detail
@@ -44,7 +43,16 @@ type ExperienceState = {
   loadExperience(experienceId: string): Promise<void>;
   loadList(): Promise<void>;
   probeListQuery(query: ListWalkExperiencesQuery): Promise<ListProbeResult>;
+  /** Sign-out. These rows belong to the user who just left. */
+  reset(): void;
 };
+
+/**
+ * Module scope, like the diary flow's generate counter: it survives Fast
+ * Refresh, and a list request already in flight when the user signs out must
+ * not land afterwards and repopulate the archive with the previous user's rows.
+ */
+let resetRun = 0;
 
 export const useExperiences = create<ExperienceState>((set, get) => {
   const append = (line: string) => {
@@ -52,11 +60,6 @@ export const useExperiences = create<ExperienceState>((set, get) => {
     set((state) => ({
       log: [`${new Date().toLocaleTimeString()}  ${line}`, ...state.log].slice(0, 40),
     }));
-  };
-
-  const ensureToken = async (): Promise<boolean> => {
-    if (hasAccessToken()) return true;
-    return useWalkCandidateFlow.getState().loginWithEnvCredentials();
   };
 
   // Module-scope rather than state: a second concurrent fetch would be pure
@@ -78,7 +81,7 @@ export const useExperiences = create<ExperienceState>((set, get) => {
       // A newer load supersedes this one (fast navigation between details).
       const superseded = () => get().experienceId !== experienceId;
 
-      if (!(await ensureToken())) {
+      if (!hasAccessToken()) {
         append('detail: no session');
         if (!superseded()) set({ phase: 'error' });
         return;
@@ -109,16 +112,24 @@ export const useExperiences = create<ExperienceState>((set, get) => {
     loadList: async () => {
       if (listInFlight) return;
       listInFlight = true;
+      const run = resetRun;
       set({ listPhase: 'loading' });
 
       try {
-        if (!(await ensureToken())) {
+        if (!hasAccessToken()) {
           append('list: no session');
-          set({ listPhase: 'error' });
+          if (run === resetRun) set({ listPhase: 'error' });
           return;
         }
 
         const fetched = await api.listWalkExperiences();
+        // A sign-out during the request wins: these rows are the previous
+        // user's and must not reach the archive.
+        if (run !== resetRun) {
+          append('list: superseded by sign-out');
+          return;
+        }
+
         if (fetched.ok) {
           set({ listPhase: 'ready', items: fetched.value });
           return;
@@ -138,7 +149,7 @@ export const useExperiences = create<ExperienceState>((set, get) => {
      * against a server. /debug section 8 is the caller.
      */
     probeListQuery: async (query) => {
-      if (!(await ensureToken())) {
+      if (!hasAccessToken()) {
         return { status: null, count: null, error: '세션 없음' };
       }
 
@@ -150,6 +161,18 @@ export const useExperiences = create<ExperienceState>((set, get) => {
 
       append(`probe ${JSON.stringify(query)} → ${fetched.status ?? 'network'} — ${fetched.error}`);
       return { status: fetched.status, count: null, error: fetched.error };
+    },
+
+    reset: () => {
+      resetRun += 1;
+      listInFlight = false;
+      set({
+        phase: 'idle',
+        experienceId: null,
+        detail: null,
+        listPhase: 'idle',
+        items: [],
+      });
     },
   };
 });

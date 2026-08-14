@@ -34,6 +34,20 @@ export const photoPicker: PhotoPickerPort = {
     }
   },
 
+  async getCameraPermission() {
+    try {
+      // getCameraPermissionsAsync reads; requestCameraPermissionsAsync prompts.
+      // The permissions screen must never prompt — iOS shows each dialog once
+      // per install, and spending it on a status read would be unrecoverable.
+      const permission = await ImagePicker.getCameraPermissionsAsync();
+      if (permission.granted) return { ok: true, value: 'granted' as const };
+      if (permission.canAskAgain) return { ok: true, value: 'prompt' as const };
+      return { ok: true, value: 'denied' as const };
+    } catch (error) {
+      return toError(error);
+    }
+  },
+
   async captureWithCamera() {
     try {
       const permission = await ImagePicker.requestCameraPermissionsAsync();

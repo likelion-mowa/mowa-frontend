@@ -20,13 +20,22 @@ type ButtonProps = {
   className?: string;
 };
 
+type PrimaryButtonProps = ButtonProps & {
+  /**
+   * Onboarding's single full-width CTA: 17px label, 15px padding, radius 14
+   * (prototype OnboardingScreen). Everywhere else keeps the smaller default.
+   */
+  hero?: boolean;
+};
+
 export function PrimaryButton({
   label,
   onPress,
   disabled = false,
   glow = false,
+  hero = false,
   className = '',
-}: ButtonProps) {
+}: PrimaryButtonProps) {
   const { scale, onPressIn, onPressOut } = usePressScale();
   return (
     <Pressable
@@ -37,8 +46,14 @@ export function PrimaryButton({
       onPressOut={onPressOut}
       className={`${disabled ? 'opacity-50' : ''} ${className}`}>
       <Animated.View style={[{ transform: [{ scale }] }, glow && !disabled ? shadows.ctaGlow : null]}>
-        <View className="rounded-xl bg-sage px-4 py-3.5">
-          <Text className="text-center text-sm font-semibold text-white">{label}</Text>
+        <View
+          className="bg-sage px-4"
+          style={hero ? { borderRadius: 14, paddingVertical: 15 } : { borderRadius: 12, paddingVertical: 14 }}>
+          <Text
+            className="text-center font-semibold text-white"
+            style={{ fontSize: hero ? 17 : 14 }}>
+            {label}
+          </Text>
         </View>
       </Animated.View>
     </Pressable>

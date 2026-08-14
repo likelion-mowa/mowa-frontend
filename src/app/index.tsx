@@ -1,8 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Animated,
-  Image,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -12,9 +11,9 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
-import Svg, { Defs, Ellipse, RadialGradient, Stop } from 'react-native-svg';
 
 import type { WalkExperienceListItem } from '@/api/types';
+import { CharacterHero } from '@/components/character-hero';
 import { GlassBarShell, GlassCircleButton, GlassPill } from '@/components/glass-bar';
 import { IcChevronRight, IcDocument, IcUser } from '@/components/icons';
 import { MowaFace } from '@/components/mowa-face';
@@ -23,6 +22,7 @@ import { usePressScale, useAnimatedToggle } from '@/lib/animations';
 import { formatDurationMinutes, formatTime, relativeLabel } from '@/lib/format';
 import { kstPartsFromIso } from '@/lib/kst';
 import { colors, shadows } from '@/lib/theme';
+import { useAuth } from '@/stores/auth-store';
 import { useDiaryFlow } from '@/stores/diary-flow-store';
 import { useExperiences } from '@/stores/experience-store';
 import { useWalkCandidateFlow } from '@/stores/walk-candidate-store';
@@ -32,20 +32,9 @@ import { useWalkCandidateFlow } from '@/stores/walk-candidate-store';
  * app and the one a hackathon judge opens on the deployed web URL. Developer
  * diagnostics stay on /debug.
  *
- * The prototype's character carries a CSS `drop-shadow`; that filter has no
- * portable RN equivalent (react-native-web maps shadow props to box-shadow,
- * which would draw the image's bounding box), so only the ground ellipse is
- * ported — it is what actually grounds the character.
+ * The character block itself lives in components/character-hero — onboarding
+ * shows the same one.
  */
-
-const CHARACTER = require('../../assets/images/mowa-character.png');
-
-// Source is 880x1245; keep the ratio so the character never squashes.
-const CHARACTER_WIDTH = 200;
-const CHARACTER_HEIGHT = Math.round((CHARACTER_WIDTH * 1245) / 880);
-
-const BUBBLE_HOLD_MS = 2000;
-const BUBBLE_FADE_MS = 400;
 
 /** The prototype's own hour buckets (its HomeGlassBar timeMessage). */
 function greetingFor(date: Date): string {
@@ -60,91 +49,6 @@ function greetingFor(date: Date): string {
 
 function clockFor(date: Date): string {
   return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
-}
-
-function CharacterHero() {
-  const [bubbleMounted, setBubbleMounted] = useState(false);
-  const opacity = useRef(new Animated.Value(0)).current;
-  const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  useEffect(
-    () => () => {
-      if (hideTimer.current !== null) clearTimeout(hideTimer.current);
-    },
-    [],
-  );
-
-  const showBubble = () => {
-    if (hideTimer.current !== null) clearTimeout(hideTimer.current);
-    setBubbleMounted(true);
-    Animated.timing(opacity, {
-      toValue: 1,
-      duration: BUBBLE_FADE_MS,
-      useNativeDriver: true,
-    }).start();
-
-    hideTimer.current = setTimeout(() => {
-      Animated.timing(opacity, {
-        toValue: 0,
-        duration: BUBBLE_FADE_MS,
-        useNativeDriver: true,
-      }).start(({ finished }) => {
-        if (finished) setBubbleMounted(false);
-      });
-    }, BUBBLE_HOLD_MS);
-  };
-
-  return (
-    <View className="items-center px-6 pb-2 pt-6">
-      <View className="relative items-center">
-        {bubbleMounted ? (
-          <Animated.View style={{ position: 'absolute', top: 0, right: '52%', opacity, zIndex: 10 }}>
-            <View className="rounded-xl bg-bubble px-3.5 py-2.5">
-              <Text className="text-xs font-bold leading-5 text-bubble-ink">
-                안녕하세요{'\n'}MOWA예요!
-              </Text>
-            </View>
-            {/* Tail: a rotated square reads as a triangle once the bubble overlaps it. */}
-            <View
-              className="absolute h-3 w-3 bg-bubble"
-              style={{ bottom: 4, right: -4, transform: [{ rotate: '45deg' }] }}
-            />
-          </Animated.View>
-        ) : null}
-
-        <Pressable
-          accessibilityRole="image"
-          accessibilityLabel="MOWA 캐릭터"
-          onPress={showBubble}>
-          <Image
-            source={CHARACTER}
-            style={{ width: CHARACTER_WIDTH, height: CHARACTER_HEIGHT }}
-            resizeMode="contain"
-          />
-        </Pressable>
-
-        <Svg width={100} height={14} style={{ marginTop: -10 }}>
-          <Defs>
-            <RadialGradient id="groundShadow" cx="50%" cy="50%" rx="50%" ry="50%">
-              <Stop offset="0%" stopColor="#000000" stopOpacity={0.12} />
-              <Stop offset="55%" stopColor="#000000" stopOpacity={0.03} />
-              <Stop offset="80%" stopColor="#000000" stopOpacity={0} />
-            </RadialGradient>
-          </Defs>
-          <Ellipse cx={50} cy={7} rx={50} ry={7} fill="url(#groundShadow)" />
-        </Svg>
-      </View>
-
-      <Text
-        className="mt-1 text-center font-extrabold text-sage-lime"
-        style={{ fontSize: 36, letterSpacing: -0.7 }}>
-        MOWA
-      </Text>
-      <Text className="mt-1.5 text-center text-sm font-medium text-ink-muted">
-        당신의 산책을 모와드릴까요?
-      </Text>
-    </View>
-  );
 }
 
 /**
@@ -391,17 +295,25 @@ function HomeGlassBar() {
 
 export default function HomeScreen() {
   const loadList = useExperiences((state) => state.loadList);
+  const signedIn = useAuth((state) => state.status === 'signed-in');
 
   // Refetched on every mount: the payload is small and the archive or a saved
   // diary can change it while this screen is out of view.
+  //
+  // Gated on the session, not just mount. On a reload this screen mounts while
+  // the token is still being restored, and an ungated fetch would fire without
+  // one and land on the error card. Keying the effect on `signedIn` also makes
+  // it refetch after an account switch instead of showing the previous user's
+  // rows.
   useEffect(() => {
+    if (!signedIn) return;
     void loadList();
-  }, [loadList]);
+  }, [signedIn, loadList]);
 
   return (
     <SafeAreaView edges={['top']} className="flex-1 bg-white">
       <ScrollView className="flex-1" contentContainerClassName="pb-32">
-        <CharacterHero />
+        <CharacterHero tagline="당신의 산책을 모와드릴까요?" />
         <DetectionCard />
         <RecentWalks />
       </ScrollView>

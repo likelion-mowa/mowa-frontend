@@ -51,6 +51,13 @@ export interface WalkDetectorPort {
    */
   start(mechanism?: WalkMechanism): Promise<AdapterResult<boolean>>;
   stop(): Promise<AdapterResult<boolean>>;
+  /**
+   * Withholds the walk notification while leaving detection running (설정 >
+   * 기록 제안 알림). The Core posts the notification itself, so this is the
+   * only honest way to expose that switch — a JS-side flag could not suppress
+   * anything.
+   */
+  setNotificationsEnabled(enabled: boolean): Promise<AdapterResult<boolean>>;
   queryHistory(sinceMs: number): Promise<AdapterResult<WalkEvent[]>>;
   getDiagnostics(): Promise<AdapterResult<WalkDetectorDiagnostics>>;
   emitTestEvent(): Promise<AdapterResult<boolean>>;
@@ -174,6 +181,14 @@ export interface PhotoPickerPort {
   /** Resolves `null` when the user cancelled the picker — that is not an error. */
   pickFromLibrary(): Promise<AdapterResult<PickedPhoto | null>>;
   captureWithCamera(): Promise<AdapterResult<PickedPhoto | null>>;
+  /**
+   * Reads the camera permission WITHOUT prompting, for the permissions screen.
+   *
+   * There is no library equivalent on purpose: the library path runs through
+   * PHPickerViewController out of process, so this app holds no photo-library
+   * permission at all and a row claiming otherwise would be fiction.
+   */
+  getCameraPermission(): Promise<AdapterResult<PermissionState>>;
 }
 
 export interface StoragePort {
@@ -183,6 +198,44 @@ export interface StoragePort {
   listWalks(): Promise<AdapterResult<DetectedWalk[]>>;
   insertWalk(record: DetectedWalk): Promise<AdapterResult<true>>;
   clear(): Promise<AdapterResult<true>>;
+}
+
+/**
+ * Small key-value store that survives a relaunch, backed by the OS keychain on
+ * iOS and localStorage on web.
+ *
+ * Separate from StoragePort on purpose: that one is a walk-record repository
+ * (`DetectedWalk` rows), not a KV store, and widening it would mean a new
+ * SQLite table plus a `PRAGMA user_version` bump on every installed device.
+ *
+ * It also carries two values that are NOT secrets — the detection and
+ * notification preferences. A second mechanism just for them would cost another
+ * dependency (no AsyncStorage here) to save two keychain entries, which is the
+ * worse trade.
+ */
+export interface SecureStorePort {
+  /** True when backed by the OS keychain. False for the web fallback. */
+  readonly isSecure: boolean;
+  /** Resolves `null` when the key was never written — that is not an error. */
+  getItem(key: string): Promise<AdapterResult<string | null>>;
+  setItem(key: string, value: string): Promise<AdapterResult<true>>;
+  deleteItem(key: string): Promise<AdapterResult<true>>;
+}
+
+/**
+ * Keys owned by SecureStorePort. Versioned like `mowa.walks.v2` so a shape
+ * change abandons the old value instead of misreading it.
+ */
+export const SECURE_KEYS = {
+  authToken: 'mowa.auth.token.v1',
+  detectionEnabled: 'mowa.detection.enabled.v1',
+  notificationsEnabled: 'mowa.notification.enabled.v1',
+} as const;
+
+/** Opens the OS settings app for this app. iOS only. */
+export interface SystemSettingsPort {
+  readonly isAvailable: boolean;
+  open(): Promise<AdapterResult<true>>;
 }
 
 /** Normalizes an unknown throwable into the AdapterResult error branch. */

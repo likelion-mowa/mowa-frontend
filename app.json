@@ -64,7 +64,8 @@
           "NSHealthUpdateUsageDescription": "Mowa does not write health data, but HealthKit requires this key in order to request read permission."
         }
       ],
-      "./plugins/with-development-team"
+      "./plugins/with-development-team",
+      "expo-secure-store"
     ],
     "experiments": {
       "typedRoutes": true,

@@ -25,6 +25,9 @@ const MUST_BE_ABSENT = [
   // Only photo-picker.native.ts may import this; the web adapter is a DOM
   // file input precisely so this specifier never reaches the web graph.
   'expo-image-picker',
+  // Only secure-store.native.ts may import this. The web adapter is
+  // localStorage and never names the package, not even in prose.
+  'expo-secure-store',
 ];
 
 /** Things whose absence means the bundle is broken or the split went too far. */
@@ -51,7 +54,18 @@ const MUST_BE_PRESENT = [
   ['home subtitle', '당신의 산책을 모와드릴까요?'],
   ['archive subtitle', '산책 기억 모음'],
   ['archive empty state', '산책 기록이 없어요'],
-  ['settings placeholder', '설정 화면을 준비 중이에요'],
+  // Auth + settings screens. One unique headline each, so a screen whose
+  // import graph broke is caught here rather than at runtime.
+  ['onboarding signature', '기록이 쌓이면, 기억이 됩니다.'],
+  ['login subtitle', '로그인하고 산책 기억을 확인해보세요'],
+  ['settings section', '권한 및 개인정보'],
+  ['settings 로그아웃', '로그아웃'],
+  ['detection toggle', '자동 감지 사용'],
+  ['permissions action', '기기 설정 열기'],
+  // Positive control for the WEB secure-store adapter, the same trick as the
+  // walks storage key: it proves the localStorage half shipped rather than
+  // the whole module being split away.
+  ['secure store key', 'mowa.auth.token.v1'],
 ];
 
 let bundles;

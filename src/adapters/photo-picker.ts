@@ -58,4 +58,10 @@ export const photoPicker: PhotoPickerPort = {
   captureWithCamera() {
     return pickViaInput(true);
   },
+
+  // The file input grants nothing up front, and a browser exposes no readable
+  // camera permission state without asking for the stream.
+  async getCameraPermission() {
+    return { ok: true, value: 'unavailable' };
+  },
 };
