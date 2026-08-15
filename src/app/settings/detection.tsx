@@ -21,10 +21,12 @@ import { useDetection } from '@/stores/detection-store';
  * exposed at all. Shipping them would be four controls that change nothing.
  *
  * So the toggle is real — it is the app's only product-code call to
- * start()/stop() — and the thresholds are shown read-only, sourced from
- * getDiagnostics(). Only `endDebounceSeconds` is in that payload; 30보 and
- * 재알림 300초 are Swift literals that no gate verifies, so they are not
- * echoed here. Surfacing them is a follow-up on the diagnostics payload.
+ * start()/stop() — and all three thresholds are shown read-only, sourced from
+ * getDiagnostics(). None of them is mirrored as a TypeScript constant: the
+ * payload carries the Core's own UserDefaults-backed getters, so what is on
+ * screen is what is in effect. A mirrored copy would be a second source of
+ * truth that no gate here could catch drifting from the Swift literals at
+ * WalkDetectorModule.swift:63-65.
  */
 export default function DetectionSettingsScreen() {
   const phase = useDetection((state) => state.phase);
@@ -88,10 +90,27 @@ export default function DetectionSettingsScreen() {
         {!unavailable ? (
           <SettingsSection title="현재 감지 기준">
             <SettingsFact label="감지 동작 중" value={running ? '예' : '아니오'} divider />
+            {/*
+              The three criteria in the order a walk meets them: it has to pass
+              the step bar, then hold still long enough to count as over, and
+              only then may another notification follow.
+            */}
+            <SettingsFact
+              label="걸음 수 기준"
+              value={diagnostics === null ? '—' : `${diagnostics.thresholdSteps}보`}
+              divider
+            />
             <SettingsFact
               label="종료 판단 대기 시간"
               value={
                 diagnostics === null ? '—' : `${Math.round(diagnostics.endDebounceSeconds)}초`
+              }
+              divider
+            />
+            <SettingsFact
+              label="재알림 간격"
+              value={
+                diagnostics === null ? '—' : `${Math.round(diagnostics.cooldownSeconds)}초`
               }
               divider
             />

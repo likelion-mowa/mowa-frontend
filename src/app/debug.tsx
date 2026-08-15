@@ -310,6 +310,17 @@ export default function SmokeScreen() {
             label="notificationsEnabled (native)"
             value={state.diagnostics ? String(state.diagnostics.notificationsEnabled) : '—'}
           />
+          {/*
+            The HealthKit safety net leaves no other trace in the app: it posts
+            its notification natively and emits no JS event. Without this row,
+            confirming a fire means pulling os_log off the phone with
+            `log collect`. 'never' is honest — the key is unwritten until the
+            observer has fired once on this install.
+          */}
+          <Row
+            label="observer last fired"
+            value={state.diagnostics ? agoLabel(state.diagnostics.lastObserverFiredAtMs) : '—'}
+          />
           <Row
             label="warnings"
             value={state.diagnostics ? String(state.diagnostics.warnings.length) : '—'}

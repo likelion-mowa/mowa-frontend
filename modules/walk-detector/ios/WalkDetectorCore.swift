@@ -834,6 +834,19 @@ final class WalkDetectorCore: NSObject {
             "walkQualified": walkQualified,
             "stationarySinceMs": Self.epochMsOrNull(stationarySince),
             "endDebounceSeconds": endDebounceSeconds,
+            // The other two detection criteria, read through the same
+            // UserDefaults-backed getters as endDebounceSeconds. Reporting them
+            // here rather than copying 30/300 into TypeScript is the point: a
+            // copy would be a second source of truth that no gate in this repo
+            // could catch drifting from the Swift literal.
+            "thresholdSteps": thresholdSteps,
+            "cooldownSeconds": cooldownSeconds,
+            // Observer liveness. Confirming that the HealthKit safety net
+            // actually fired otherwise means pulling os_log off the phone with
+            // `log collect` — this row is what makes /debug enough.
+            "lastObserverFiredAtMs": Self.epochMsOrNull(
+                epochSeconds: UserDefaults.standard.double(forKey: Keys.lastObserverFiredAt)
+            ),
             "lastActivityAtMs": Self.epochMsOrNull(lastActivityAt),
             "lastPedometerAtMs": Self.epochMsOrNull(lastPedometerAt),
         ]
@@ -842,6 +855,14 @@ final class WalkDetectorCore: NSObject {
     private static func epochMsOrNull(_ date: Date?) -> Any {
         guard let date else { return NSNull() }
         return date.timeIntervalSince1970 * 1000
+    }
+
+    /// handleObserverFired stores its timestamps as epoch SECONDS (`:591`), and
+    /// `double(forKey:)` answers 0 for a key that was never written — which here
+    /// means "never fired on this install", not 1970.
+    private static func epochMsOrNull(epochSeconds: Double) -> Any {
+        guard epochSeconds > 0 else { return NSNull() }
+        return epochSeconds * 1000
     }
 
     /// 앱이 꺼져 있던 동안의 걷기를 소급 조회합니다.

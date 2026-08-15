@@ -85,7 +85,27 @@ export type WalkDetectorDiagnostics = {
   walkQualified: boolean;
   /** Set while an end is being debounced — the real moment the user stopped. */
   stationarySinceMs: number | null;
+
+  /**
+   * The three detection criteria, all sourced from the Core's UserDefaults-backed
+   * getters so 자동 감지 설정 shows what is actually in effect. They are NOT
+   * mirrored as TypeScript constants on purpose: a mirror is a second source of
+   * truth, and no gate in this repo compares it against the Swift literals at
+   * WalkDetectorModule.swift:63-65.
+   */
   endDebounceSeconds: number;
+  /** The step bar a walk must pass to qualify. */
+  thresholdSteps: number;
+  /** Minimum gap between two walk notifications, shared by both mechanisms. */
+  cooldownSeconds: number;
+
+  /**
+   * When the HealthKit observer safety net last fired. Null = never on this
+   * install (the Core stores 0 for an unwritten key). Its only consumer is
+   * /debug: it is how an observer fire is confirmed without pulling os_log off
+   * the device.
+   */
+  lastObserverFiredAtMs: number | null;
   /** Sensor liveness. A stale value with detection running means a dead subscription. */
   lastActivityAtMs: number | null;
   lastPedometerAtMs: number | null;

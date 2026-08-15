@@ -143,6 +143,11 @@ public class WalkDetectorModule: Module {
           "walkQualified": (status["walkQualified"] as? Bool) ?? false,
           "stationarySinceMs": status["stationarySinceMs"] ?? NSNull(),
           "endDebounceSeconds": (status["endDebounceSeconds"] as? Double) ?? 0,
+          // The full set of detection criteria, so 자동 감지 설정 can show all
+          // three instead of echoing Swift literals it cannot verify.
+          "thresholdSteps": (status["thresholdSteps"] as? Int) ?? 0,
+          "cooldownSeconds": (status["cooldownSeconds"] as? Double) ?? 0,
+          "lastObserverFiredAtMs": status["lastObserverFiredAtMs"] ?? NSNull(),
           "lastActivityAtMs": status["lastActivityAtMs"] ?? NSNull(),
           "lastPedometerAtMs": status["lastPedometerAtMs"] ?? NSNull(),
           // 설정 > 기록 제안 알림. Read back rather than mirrored in JS: the
