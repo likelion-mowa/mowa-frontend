@@ -10,6 +10,7 @@
     "ios:clean": "npm run prebuild && npm run ios",
     "prebuild": "expo prebuild --platform ios --clean && npm run strip-aps",
     "strip-aps": "node scripts/strip-aps-entitlement.mjs",
+    "bump:build": "node scripts/bump-build-number.mjs",
     "patch:jsi": "node scripts/patch-expo-jsi.mjs",
     "postinstall": "node scripts/patch-expo-jsi.mjs",
     "typecheck": "tsc --noEmit",

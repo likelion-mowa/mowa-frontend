@@ -12,6 +12,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 
+import type { DetectedWalk } from '@/adapters';
 import type { WalkExperienceListItem } from '@/api/types';
 import { CharacterHero } from '@/components/character-hero';
 import { GlassBarShell, GlassCircleButton, GlassPill } from '@/components/glass-bar';
@@ -55,29 +56,21 @@ function clockFor(date: Date): string {
  * The prototype's detection CTA, bound to real state instead of its hardcoded
  * "43분 · 망원동 · 오후 3:42".
  *
- * It appears only while this session's detection is still worth acting on: the
- * server has to know the candidate, the user must not have skipped it, and the
- * diary for that same candidate must not already be saved. `/walk` re-resolves
- * everything on entry and bounces stale taps home, so this is a shortcut to it,
- * never an authority on it.
+ * `/walk` re-resolves everything on entry and bounces stale taps home, so this
+ * is a shortcut to it, never an authority on it.
  *
  * There is no location: the detector reports none (locationSummary is always
  * null), so the prototype's 망원동 has no real counterpart.
  */
-function DetectionCard() {
-  const detection = useWalkCandidateFlow((state) => state.lastDetection);
-  const active = useWalkCandidateFlow((state) => state.activeCandidate);
-  const flowWalk = useDiaryFlow((state) => state.walk);
-  const flowExperienceId = useDiaryFlow((state) => state.experienceId);
+/**
+ * Carries the pending card's fill and radius so its colored shadow has an
+ * opaque surface to come off. `rounded-2xl` is 16, and the two must match or
+ * the glow traces a square around the rounded card on web.
+ */
+const glowSurface = { borderRadius: 16, backgroundColor: colors.sage } as const;
+
+function PendingCard({ detection }: { detection: DetectedWalk }) {
   const { scale, onPressIn, onPressOut } = usePressScale();
-
-  if (detection === null || detection.candidateId === null) return null;
-
-  const skipped =
-    active?.candidateId === detection.candidateId && active.serverStatus === 'SKIPPED';
-  const alreadySaved =
-    flowWalk?.candidateId === detection.candidateId && flowExperienceId !== null;
-  if (skipped || alreadySaved) return null;
 
   const durationSeconds =
     detection.endedAtMs === null
@@ -89,17 +82,32 @@ function DetectionCard() {
   ].join(' · ');
 
   return (
-    <View className="mt-6 px-4">
-      <Text className="mb-3 px-1 text-[11px] font-semibold uppercase tracking-wider text-ink-subtle">
-        산책 기록 알림
-      </Text>
-      <Pressable
-        accessibilityRole="button"
-        onPress={() => router.push('/walk')}
-        onPressIn={onPressIn}
-        onPressOut={onPressOut}>
-        <Animated.View style={[{ transform: [{ scale }] }, shadows.ctaGlow]}>
-          <View className="flex-row items-center gap-3 rounded-2xl bg-sage p-4">
+    <Pressable
+      accessibilityRole="button"
+      onPress={() => router.push('/walk')}
+      onPressIn={onPressIn}
+      onPressOut={onPressOut}>
+      {/*
+        Two nested views on purpose. The glow must sit on a view that is opaque
+        and unclipped — iOS draws no shadow for a transparent view (the trap
+        PR #19 hit on the glass bar), and `overflow: hidden` on that same view
+        would clip the glow away. So the outer one carries the sage fill, the
+        matching radius and the shadow, and the inner one does the clipping.
+        No className on Animated.View: unverified on this stack, see PhotoTile.
+      */}
+      <Animated.View style={[{ transform: [{ scale }] }, glowSurface, shadows.detectionGlow]}>
+        <View className="overflow-hidden rounded-2xl border border-white/15 bg-sage">
+          {/*
+            The prototype's glass sheen (App.tsx:1224-1231): a lighter top half
+            ending in a hard edge at the midpoint, which is why the last two
+            stops share an offset. Sits under the content, over the fill.
+          */}
+          <LinearGradient
+            colors={['rgba(255,255,255,0.18)', 'rgba(255,255,255,0.04)', 'rgba(255,255,255,0)']}
+            locations={[0, 0.5, 0.5]}
+            style={StyleSheet.absoluteFill}
+          />
+          <View className="flex-row items-center gap-3 p-4">
             <View className="h-[42px] w-[42px] items-center justify-center rounded-full border-[1.5px] border-white/35 bg-white/25">
               <MowaFace size={30} />
             </View>
@@ -112,8 +120,72 @@ function DetectionCard() {
             </View>
             <IcChevronRight size={16} color="rgba(255,255,255,0.6)" />
           </View>
-        </Animated.View>
-      </Pressable>
+        </View>
+      </Animated.View>
+    </Pressable>
+  );
+}
+
+/**
+ * What the section shows when nothing is waiting to be recorded.
+ *
+ * Deliberately not pressable: `/walk` re-resolves on entry and would bounce
+ * straight back here, so a tap target would be a dead button.
+ *
+ * Same skeleton as PendingCard (42px face + two lines) so the area stays
+ * recognisable across states, but in the quiet palette and with no glow — it
+ * reports a state, it does not ask to be tapped.
+ */
+function IdleCard() {
+  return (
+    <View className="flex-row items-center gap-3 rounded-2xl border border-line bg-parchment p-4">
+      <View className="h-[42px] w-[42px] items-center justify-center rounded-full border-[1.5px] border-line bg-white">
+        <MowaFace size={30} />
+      </View>
+      <View className="flex-1">
+        <Text className="mb-0.5 text-sm font-semibold text-ink">아직 감지된 산책이 없어요</Text>
+        <Text className="text-xs text-ink-muted">걷고 나면 알려드릴게요</Text>
+      </View>
+    </View>
+  );
+}
+
+/**
+ * 산책 기록 알림. The section itself always renders; only the card inside it
+ * branches.
+ *
+ * The prototype's card is hardcoded and therefore always visible, while this
+ * one is bound to a real detection — so before the idle state existed the whole
+ * area vanished whenever nothing was pending, which on web (no detector, so
+ * `lastDetection` never leaves null) meant it never appeared at all.
+ *
+ * A pending card needs all three: the server knows the candidate, the user has
+ * not skipped it, and its diary is not already saved. The four ways that can
+ * fail collapse into one idle state on purpose — from the user's side they all
+ * mean "nothing to record right now", and splitting them would multiply
+ * team-owned copy for no gain.
+ */
+function DetectionSection() {
+  const detection = useWalkCandidateFlow((state) => state.lastDetection);
+  const active = useWalkCandidateFlow((state) => state.activeCandidate);
+  const flowWalk = useDiaryFlow((state) => state.walk);
+  const flowExperienceId = useDiaryFlow((state) => state.experienceId);
+
+  const pending = ((): DetectedWalk | null => {
+    if (detection === null || detection.candidateId === null) return null;
+    const skipped =
+      active?.candidateId === detection.candidateId && active.serverStatus === 'SKIPPED';
+    const alreadySaved =
+      flowWalk?.candidateId === detection.candidateId && flowExperienceId !== null;
+    return skipped || alreadySaved ? null : detection;
+  })();
+
+  return (
+    <View className="mt-6 px-4">
+      <Text className="mb-3 px-1 text-[11px] font-semibold uppercase tracking-wider text-ink-subtle">
+        산책 기록 알림
+      </Text>
+      {pending === null ? <IdleCard /> : <PendingCard detection={pending} />}
     </View>
   );
 }
@@ -314,7 +386,7 @@ export default function HomeScreen() {
     <SafeAreaView edges={['top']} className="flex-1 bg-white">
       <ScrollView className="flex-1" contentContainerClassName="pb-32">
         <CharacterHero tagline="당신의 산책을 모와드릴까요?" />
-        <DetectionCard />
+        <DetectionSection />
         <RecentWalks />
       </ScrollView>
       <HomeGlassBar />
