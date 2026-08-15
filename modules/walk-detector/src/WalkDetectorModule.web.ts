@@ -53,6 +53,9 @@ class WalkDetectorModule extends NativeModule<WalkDetectorModuleEvents> {
       walkQualified: false,
       stationarySinceMs: null,
       endDebounceSeconds: 0,
+      thresholdSteps: 0,
+      cooldownSeconds: 0,
+      lastObserverFiredAtMs: null,
       lastActivityAtMs: null,
       lastPedometerAtMs: null,
     };
