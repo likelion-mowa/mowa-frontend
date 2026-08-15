@@ -542,9 +542,10 @@ export default function SmokeScreen() {
             }}
           />
           <Text className="mt-1 text-xs text-amber-700">
-            ⚠️ 실제 로컬 산책 버퍼를 지웁니다. 서버 후보는 그대로 남습니다. 실시간 감지의
-            POST가 아직 떠 있는 동안 누르면 대장까지 함께 지워져 중복이 생기니, 감지가
-            가라앉은 뒤에 누르세요.
+            ⚠️ 실제 로컬 산책 버퍼를 지웁니다. 지운 뒤 히스토리에 남아 있는 산책은 앱
+            입장에서 처음 보는 것이므로, 서버에 이미 후보가 있어도 하나 더 만듭니다 —
+            버그가 아니라 버퍼를 지운 결과입니다(후보 목록 API가 없어 대조가 불가능,
+            공백 1). 중복 없이 되는지 보려면 아래 &ldquo;버퍼 유지&rdquo; 버튼을 쓰세요.
           </Text>
           {/*
             The at-most-once test, which the button above cannot perform: it
