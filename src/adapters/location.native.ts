@@ -6,6 +6,7 @@ import {
   type LocationPermission,
   type LocationPort,
   type PermissionState,
+  type PlaceReading,
 } from './types';
 
 /**
@@ -63,6 +64,40 @@ function toGeocodedAddress(address: Location.LocationGeocodedAddress): GeocodedA
   };
 }
 
+/**
+ * `getCurrentPositionAsync` takes no timeout and iOS gives it none: with no
+ * obtainable fix it waits forever, resolving neither way.
+ *
+ * Measured on device 2026-08-15 — in airplane mode the /debug button produced
+ * no result, no error and no log line at all. The read must therefore carry its
+ * own deadline, because the detection path this feeds in step 2 creates the
+ * walk candidate, and a hang there would stall the candidate outright.
+ *
+ * 8s is chosen against the same measurement: a normal read took 122 ms with a
+ * 2.8s-old fix, so anything near this bound is already a failing read, not a
+ * slow one.
+ */
+const PLACE_READ_TIMEOUT_MS = 8_000;
+
+async function readPlace(startedAt: number): Promise<PlaceReading> {
+  // Balanced (~100m) is the accuracy expo already defaults to, and it is the
+  // right tier for a neighbourhood name: a finer fix costs time and battery to
+  // resolve the same 동. This is a foreground read on demand and is unrelated
+  // to the detector's keepalive, which AGENTS.md forbids lowering.
+  const position = await Location.getCurrentPositionAsync({
+    accuracy: Location.Accuracy.Balanced,
+  });
+  const addresses = await Location.reverseGeocodeAsync(position.coords);
+  return {
+    latitude: position.coords.latitude,
+    longitude: position.coords.longitude,
+    fixAgeMs: Date.now() - position.timestamp,
+    elapsedMs: Date.now() - startedAt,
+    // An empty list is reported as success on purpose — see PlaceReading.
+    addresses: addresses.map(toGeocodedAddress),
+  };
+}
+
 export const location: LocationPort = {
   isAvailable: true,
 
@@ -101,29 +136,23 @@ export const location: LocationPort = {
 
   async getCurrentPlace() {
     const startedAt = Date.now();
+    let timer: ReturnType<typeof setTimeout> | undefined;
     try {
-      // Balanced (~100m) is the accuracy expo already defaults to, and it is
-      // the right tier for a neighbourhood name: a finer fix costs time and
-      // battery to resolve the same 동. This is a foreground read on demand and
-      // is unrelated to the detector's keepalive, which AGENTS.md forbids
-      // lowering.
-      const position = await Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.Balanced,
+      const expired = new Promise<null>((resolve) => {
+        timer = setTimeout(() => resolve(null), PLACE_READ_TIMEOUT_MS);
       });
-      const addresses = await Location.reverseGeocodeAsync(position.coords);
-      return {
-        ok: true,
-        value: {
-          latitude: position.coords.latitude,
-          longitude: position.coords.longitude,
-          fixAgeMs: Date.now() - position.timestamp,
-          elapsedMs: Date.now() - startedAt,
-          // An empty list is reported as success on purpose — see PlaceReading.
-          addresses: addresses.map(toGeocodedAddress),
-        },
-      };
+      const reading = await Promise.race([readPlace(startedAt), expired]);
+      if (reading === null) {
+        return {
+          ok: false,
+          error: `No position within ${PLACE_READ_TIMEOUT_MS} ms — no usable fix (airplane mode, indoors, or a cold start).`,
+        };
+      }
+      return { ok: true, value: reading };
     } catch (error) {
       return toError(error);
+    } finally {
+      clearTimeout(timer);
     }
   },
 };

@@ -90,6 +90,7 @@ export default function SmokeScreen() {
   // Local rather than in diagnostics-store: this is a one-off measurement read
   // off the screen, with no reason to outlive the mount.
   const [place, setPlace] = useState<PlaceReading | null>(null);
+  const [placeStatus, setPlaceStatus] = useState<string | null>(null);
 
   const runProbe = async (query: ListWalkExperiencesQuery) => {
     const result = await experiences.probeListQuery(query);
@@ -234,11 +235,23 @@ export default function SmokeScreen() {
           <Button
             title="Read current place (reverse geocode)"
             onPress={async () => {
-              // run() returns null on failure, which clears a previous reading
-              // instead of leaving a stale one on screen next to a fresh error.
-              setPlace(await run('location.getCurrentPlace', location.getCurrentPlace()));
+              // Not run(): the error text has to reach the screen, and the Log
+              // section is far below the fold. Measured 2026-08-15 — a read that
+              // never answered was indistinguishable from a dead button.
+              setPlaceStatus('reading…');
+              setPlace(null);
+              const result = await location.getCurrentPlace();
+              if (result.ok) {
+                append(`location.getCurrentPlace: ok ${JSON.stringify(result.value)}`);
+                setPlace(result.value);
+                setPlaceStatus('ok');
+              } else {
+                append(`location.getCurrentPlace: FAILED — ${result.error}`);
+                setPlaceStatus(result.error);
+              }
             }}
           />
+          {placeStatus !== null && <Row label="last read" value={placeStatus} />}
           {place !== null && (
             <>
               <Row
