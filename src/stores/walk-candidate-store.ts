@@ -317,11 +317,20 @@ export const useWalkCandidateFlow = create<WalkCandidateFlowState>((set, get) =>
   const submitChoice = async (status: 'RECORDING' | 'SKIPPED'): Promise<void> => {
     const active = get().activeCandidate;
     if (active === null || get().suggestionPhase !== 'ready') return;
+    // Captured, not bumped: a submit does not supersede anything, but a NEWER
+    // openSuggestion supersedes it. Without this, a submit landing after a
+    // second tap remounted /walk writes its own terminal state on top of the
+    // new run — phase 'done' carrying the PREVIOUS walk's candidate, which
+    // walk.tsx reads as "resume the diary" for the wrong walk. Reconcile made
+    // the window wide enough to matter: loading is now a native history query
+    // plus up to three round trips, not one GET.
+    const run = suggestionRun;
+    const superseded = () => run !== suggestionRun;
     set({ suggestionPhase: 'submitting' });
 
     const fail = (line: string) => {
       append(line);
-      set({ suggestionPhase: 'ready' });
+      if (!superseded()) set({ suggestionPhase: 'ready' });
     };
 
     if (!hasAccessToken()) {
@@ -370,6 +379,7 @@ export const useWalkCandidateFlow = create<WalkCandidateFlowState>((set, get) =>
     // fallback it is the ONLY place the stamped end values exist — the diary
     // flow copies them from here, so dropping them showed 소요 시간 '—'.
     const serverEnd = updated.value.detectedEndAt;
+    if (superseded()) return;
     set({
       suggestionPhase: 'done',
       activeCandidate: {
