@@ -21,7 +21,7 @@
     "verify:web": "expo export --platform web && node scripts/check-web-bundle.mjs",
     "mock": "node --experimental-strip-types --disable-warning=ExperimentalWarning --disable-warning=MODULE_TYPELESS_PACKAGE_JSON mock/server.mjs",
     "mock:test": "node --experimental-strip-types --disable-warning=ExperimentalWarning --disable-warning=MODULE_TYPELESS_PACKAGE_JSON mock/contract-test.mjs",
-    "mock:reset": "rm -f mock/db.json"
+    "mock:reset": "node -e \"require('node:fs').rmSync('mock/db.json',{force:true})\""
   },
   "dependencies": {
     "@kingstinct/react-native-healthkit": "^14.0.2",
