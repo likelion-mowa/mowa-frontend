@@ -22,11 +22,18 @@ import {
  * (건너뛰기). Screens read this store; only the store talks to the api client
  * and the adapters.
  *
- * The observer safety net never reaches this flow: it posts its notification
- * natively and emits no JS event (WalkDetectorCore.handleObserverFired), so a
- * tap on one of its notifications finds no local candidate and lands back on
- * the home screen. Reconciling those walks via queryHistory is a follow-up
- * task — see docs/api-implementation.md 공백 2.
+ * The observer safety net posts its notification natively and emits no JS event
+ * (WalkDetectorCore.handleObserverFired), and its notification carries no walk
+ * identity at all — the observer itself only knows a 2-hour cumulative step
+ * delta, never a start or an end. So its walks reach this flow the only way
+ * they can: on entry, /walk asks the detector for its history and adopts the
+ * walk the notification was about (reconcile, below).
+ *
+ * That path POSTs at most once per detected walk — the local buffer is the
+ * ledger — which is what keeps the "duplicate candidates are harmless" verdict
+ * in docs/api-implementation.md 공백 5 true now that the client does retry.
+ * There is still no candidate list endpoint (공백 1), so a wiped buffer cannot
+ * be recovered from the server, and reconcile refuses to run without one.
  */
 
 /**
@@ -65,10 +72,18 @@ type WalkCandidateFlowState = {
 
   suggestionPhase: SuggestionPhase;
   activeCandidate: ActiveCandidate | null;
+  /**
+   * When the notification that sent the user here was posted, or null for an
+   * entry that was not a tap (the home DetectionCard, /debug). The suggestion
+   * run anchors on it — see `noteNotificationTap`.
+   */
+  tapIssuedAtMs: number | null;
 
   handleWalkEvent(event: WalkEvent): Promise<void>;
   /** Idempotent. Returns the unsubscribe for the layout effect's cleanup. */
   startCandidateFlow(): () => void;
+  /** Called by the root layout on a notification tap, before /walk mounts. */
+  noteNotificationTap(issuedAtMs: number | null): void;
 
   /** /walk mount: resolve the candidate, sync it, mark it SUGGESTED. */
   openSuggestion(): Promise<void>;
@@ -93,6 +108,65 @@ let storageReady = false;
  * a sibling instance can cancel.
  */
 let suggestionRun = 0;
+/**
+ * Single-flight for reconcile. A notification tap was measured mounting /walk
+ * twice (see above), and `POST /walk-candidates` has no idempotency key
+ * (docs/api-implementation.md 공백 5) — two concurrent runs would create two
+ * candidates for one walk. `superseded()` cannot help: it gates state writes,
+ * not a network call that has already left.
+ */
+let reconcileInFlight: Promise<DetectedWalk | null> | null = null;
+
+/**
+ * How far back a notification tap may reach for the walk it is about.
+ *
+ * Not an arbitrary round number. The observer reads an HKStatisticsQuery over
+ * [now − 2h, now] and notifies on the delta between two such window sums
+ * (WalkDetectorCore.handleObserverFired). A sample enters that window by being
+ * DATED inside it, so the walk that caused a fire always ended within 2h of the
+ * fire — a late Apple Watch sync included, since it is filtered by sample date
+ * rather than arrival time. The extra hour covers the fire → post lag and a tap
+ * whose issuedAtMs we could not read.
+ */
+const RECONCILE_WINDOW_MS = 3 * 60 * 60 * 1000;
+
+/**
+ * A local candidate this close to the notification IS the notification's walk,
+ * so the history query is skipped entirely. The live path posts one endDebounce
+ * (180 s) after the walk ended; the observer posts 7–18 min after (measured
+ * 2026-08-13). 20 min clears both with margin.
+ */
+const LOCAL_MATCH_MS = 20 * 60 * 1000;
+
+/** Do two closed intervals touch? */
+function overlaps(aStart: number, aEnd: number, bStart: number, bEnd: number): boolean {
+  return aStart <= bEnd && bStart <= aEnd;
+}
+
+/**
+ * Is this history row a walk the local buffer already holds?
+ *
+ * Overlap, not id equality, is the real test — the id is only a cheap first
+ * check. Two reasons matching ids alone fails: the live path absorbs stops
+ * under 180 s into ONE walk while the history query splits a segment on every
+ * non-walking row, so one live walk spans several history rows; and
+ * `retro-<epochSec>` is not stable across taps, because queryActivityStarting
+ * is called with a `since` that moves with the anchor.
+ *
+ * Deliberately compared against EVERY stored row, including ones whose POST
+ * failed (candidateId null). That makes adoption at-most-once per detected walk
+ * forever: a lost POST is never retried, which is exactly the retry that would
+ * invalidate 공백 5's harmless-duplicates verdict. A2's target — an observer
+ * walk with no local row at all — is unaffected.
+ */
+function isKnownLocally(row: WalkEvent, stored: DetectedWalk[]): boolean {
+  const rowEnd = row.endedAtMs ?? row.startedAtMs;
+  return stored.some(
+    (walk) =>
+      walk.id === row.id ||
+      overlaps(row.startedAtMs, rowEnd, walk.startedAtMs, walk.endedAtMs ?? walk.startedAtMs),
+  );
+}
 
 /** Server-side CHECK: detected_end_at >= detected_start_at, duration >= 0. */
 function toEndPatch(
@@ -129,6 +203,15 @@ export const useWalkCandidateFlow = create<WalkCandidateFlowState>((set, get) =>
    * Cold (the app was launched by the tap): the newest stored detection that
    * reached the server. There is no list endpoint, so a detection whose POST
    * failed is unreachable here — by design, it is logged, not guessed at.
+   *
+   * Deliberately unbounded in age. A staleness cut here would break the two
+   * paths that legitimately point at an old candidate: the home DetectionCard
+   * (src/app/index.tsx renders it with no age limit and pushes /walk), and the
+   * RECORDING resume below, which exists so a half-written diary never becomes
+   * unreachable. The time window belongs to the history query instead — an old
+   * candidate loses because a newer history row wins, not because it was
+   * discarded, and when history has nothing it is still better than a blank
+   * bounce home.
    */
   const resolveLocalDetection = async (): Promise<DetectedWalk | null> => {
     const inMemory = get().lastDetection;
@@ -154,6 +237,76 @@ export const useWalkCandidateFlow = create<WalkCandidateFlowState>((set, get) =>
   };
 
   /**
+   * The observer path's only way into this flow: ask the detector what it saw
+   * around the notification and adopt the walk it was about.
+   *
+   * `queryHistory` merges the Core's in-memory live events with CMMotionActivity
+   * segments, so this also rescues a live detection that fired while signed out
+   * (no JS listener was attached, but the Core still recorded it) — with its
+   * real step count. Which is why rows are never filtered by `source`.
+   *
+   * Returns only an adopted walk that actually reached the server. Never call
+   * this without checking the result: `handleWalkEvent` sets `lastDetection`
+   * even when the POST failed, so returning that unconditionally would replace
+   * a usable fallback candidate with an unusable one.
+   */
+  const reconcileFromHistory = async (anchorMs: number): Promise<DetectedWalk | null> => {
+    // Refuse rather than proceed: the buffer is the at-most-once ledger, and
+    // without it there is no way to tell a walk already sent from one never
+    // sent, so every tap would POST again.
+    if (!(await ensureStorage())) {
+      append('reconcile: skipped — no local buffer');
+      return null;
+    }
+    const stored = await storage.listWalks();
+    if (!stored.ok) {
+      append(`reconcile: listWalks FAILED — ${stored.error}`);
+      return null;
+    }
+
+    const sinceMs = anchorMs - RECONCILE_WINDOW_MS;
+    const history = await walkDetector.queryHistory(sinceMs);
+    if (!history.ok) {
+      append(`reconcile: queryHistory FAILED — ${history.error}`);
+      return null;
+    }
+
+    const inWindow = history.value.filter(
+      (row) =>
+        row.endedAtMs !== null &&
+        row.endedAtMs >= sinceMs &&
+        // Bounded by START, not by end. The observer fires MID-walk whenever
+        // the live layer is the thing that died — which is the only condition
+        // under which it fires at all, since a live walk in progress suppresses
+        // it. A walk that began before the notification and ended after it is
+        // still the walk the notification is about.
+        row.startedAtMs <= anchorMs &&
+        // The history query tests `activity.walking` alone, with no confidence
+        // filter, where the live path also demands better than low.
+        row.confidence !== 'low',
+    );
+    const unknown = inWindow.filter((row) => !isKnownLocally(row, stored.value));
+    append(
+      `reconcile: history rows=${history.value.length} window=${inWindow.length} unknown=${unknown.length}`,
+    );
+
+    const pick = unknown.reduce<WalkEvent | null>((newest, row) => {
+      if (newest === null) return row;
+      return (row.endedAtMs ?? 0) > (newest.endedAtMs ?? 0) ? row : newest;
+    }, null);
+    if (pick === null) {
+      append('reconcile: nothing to adopt');
+      return null;
+    }
+
+    append(`reconcile: adopting ${pick.id} (${pick.source}) ended=${pick.endedAtMs}`);
+    await get().handleWalkEvent(pick);
+
+    const adopted = get().lastDetection;
+    return adopted?.candidateId != null ? adopted : null;
+  };
+
+  /**
    * 남기기 / 건너뛰기. Both first make sure the candidate is SUGGESTED — the
    * server's transition table only allows SUGGESTED → RECORDING | SKIPPED, and
    * the entry PATCH may have failed or never run.
@@ -164,11 +317,20 @@ export const useWalkCandidateFlow = create<WalkCandidateFlowState>((set, get) =>
   const submitChoice = async (status: 'RECORDING' | 'SKIPPED'): Promise<void> => {
     const active = get().activeCandidate;
     if (active === null || get().suggestionPhase !== 'ready') return;
+    // Captured, not bumped: a submit does not supersede anything, but a NEWER
+    // openSuggestion supersedes it. Without this, a submit landing after a
+    // second tap remounted /walk writes its own terminal state on top of the
+    // new run — phase 'done' carrying the PREVIOUS walk's candidate, which
+    // walk.tsx reads as "resume the diary" for the wrong walk. Reconcile made
+    // the window wide enough to matter: loading is now a native history query
+    // plus up to three round trips, not one GET.
+    const run = suggestionRun;
+    const superseded = () => run !== suggestionRun;
     set({ suggestionPhase: 'submitting' });
 
     const fail = (line: string) => {
       append(line);
-      set({ suggestionPhase: 'ready' });
+      if (!superseded()) set({ suggestionPhase: 'ready' });
     };
 
     if (!hasAccessToken()) {
@@ -217,6 +379,7 @@ export const useWalkCandidateFlow = create<WalkCandidateFlowState>((set, get) =>
     // fallback it is the ONLY place the stamped end values exist — the diary
     // flow copies them from here, so dropping them showed 소요 시간 '—'.
     const serverEnd = updated.value.detectedEndAt;
+    if (superseded()) return;
     set({
       suggestionPhase: 'done',
       activeCandidate: {
@@ -235,6 +398,7 @@ export const useWalkCandidateFlow = create<WalkCandidateFlowState>((set, get) =>
     log: [],
     suggestionPhase: 'idle',
     activeCandidate: null,
+    tapIssuedAtMs: null,
 
     handleWalkEvent: async (event) => {
       append(`event ${event.source} steps=${event.steps} ended=${event.endedAtMs ?? 'null'}`);
@@ -249,6 +413,27 @@ export const useWalkCandidateFlow = create<WalkCandidateFlowState>((set, get) =>
       };
 
       await ensureStorage();
+
+      const store = async (row: DetectedWalk) => {
+        if (!storageReady) return;
+        const inserted = await storage.insertWalk(row);
+        if (!inserted.ok) append(`insertWalk FAILED — ${inserted.error}`);
+      };
+
+      // Claim the walk in the ledger BEFORE the POST, not only after it.
+      //
+      // Measured on device 2026-08-15: the live path detected a 954-step walk
+      // and, while its POST was still in flight, a reconcile run found no row
+      // for it and adopted the same walk again — two candidates, identical
+      // start/end. `isKnownLocally` compares against STORED rows, so a walk that
+      // exists only as an in-flight request is invisible to it, and the
+      // at-most-once invariant held only after the request came back.
+      //
+      // The id is deterministic per walk, and insertWalk is INSERT OR REPLACE,
+      // so the write below just fills in the candidateId on the same row. This
+      // also closes the smaller hole where the app is killed mid-request and the
+      // detection vanishes from the buffer entirely.
+      await store(detected);
 
       // No session: the detection stays in the local buffer and never becomes
       // a server candidate. Detection runs app-wide, so this is reachable
@@ -278,12 +463,11 @@ export const useWalkCandidateFlow = create<WalkCandidateFlowState>((set, get) =>
         append('no token — detection kept locally only');
       }
 
-      // The detection survives even when the server does not have it yet;
-      // a null candidateId is what marks it for a future retry/reconcile.
-      if (storageReady) {
-        const inserted = await storage.insertWalk(detected);
-        if (!inserted.ok) append(`insertWalk FAILED — ${inserted.error}`);
-      }
+      // Only when there is something new to record. A failed POST leaves the
+      // claim above as the final state: candidateId null marks a detection the
+      // server never got, and — per the at-most-once invariant — it is a record,
+      // not a retry queue.
+      if (detected.candidateId !== null) await store(detected);
 
       set({ lastDetection: detected });
     },
@@ -301,6 +485,16 @@ export const useWalkCandidateFlow = create<WalkCandidateFlowState>((set, get) =>
       };
     },
 
+    /**
+     * Stored verbatim, `null` included: a notification without an issuedAtMs
+     * must CLEAR an older anchor rather than let the next run inherit it. The
+     * anchor is cleared again whenever a run reaches a terminal phase, so a
+     * later non-tap entry cannot be anchored on a tap from hours ago.
+     */
+    noteNotificationTap: (issuedAtMs) => {
+      set({ tapIssuedAtMs: issuedAtMs });
+    },
+
     openSuggestion: async () => {
       const run = ++suggestionRun;
       // A superseded run must not touch state; neither must one that is still
@@ -308,13 +502,52 @@ export const useWalkCandidateFlow = create<WalkCandidateFlowState>((set, get) =>
       const superseded = () => run !== suggestionRun || get().suggestionPhase === 'submitting';
       const giveUp = (line: string) => {
         append(line);
-        if (!superseded()) set({ suggestionPhase: 'missing', activeCandidate: null });
+        if (!superseded()) {
+          set({ suggestionPhase: 'missing', activeCandidate: null, tapIssuedAtMs: null });
+        }
       };
+
+      // The walk sits next to the NOTIFICATION, not next to the tap: a
+      // cold-start tap is routed only once the session has restored, and a tap
+      // arriving while signed out is preserved and routed at sign-in — possibly
+      // hours later. Falling back to now covers a non-tap entry and an older
+      // build's notification, which carried no issuedAtMs.
+      const tapIssuedAtMs = get().tapIssuedAtMs;
+      const anchorMs = tapIssuedAtMs ?? Date.now();
+      const tapAnchored = tapIssuedAtMs !== null;
 
       set({ suggestionPhase: 'loading', activeCandidate: null });
 
-      const local = await resolveLocalDetection();
+      let local = await resolveLocalDetection();
       if (superseded()) return;
+
+      const localEndMs = local?.endedAtMs ?? local?.startedAtMs ?? null;
+      const localMatches =
+        local?.candidateId != null && localEndMs !== null && anchorMs - localEndMs <= LOCAL_MATCH_MS;
+
+      // Reconcile when nothing local exists at all, and also when a TAP found
+      // only a candidate too old to be its walk — otherwise yesterday's SKIPPED
+      // candidate swallows the tap, the run ends at 'stale tap', and the walk
+      // the user was actually notified about is never adopted. A non-tap entry
+      // never reconciles: the home card points at one specific walk.
+      if (local?.candidateId == null || (tapAnchored && !localMatches)) {
+        if (!hasAccessToken()) {
+          append('reconcile: skipped — no session');
+        } else {
+          if (reconcileInFlight === null) {
+            reconcileInFlight = reconcileFromHistory(anchorMs).finally(() => {
+              reconcileInFlight = null;
+            });
+          } else {
+            append('reconcile: joining the run already in flight');
+          }
+          const adopted = await reconcileInFlight;
+          if (superseded()) return;
+          // Upgrade only — see reconcileFromHistory.
+          if (adopted !== null) local = adopted;
+        }
+      }
+
       if (local?.candidateId == null) {
         giveUp('suggestion: no local candidate for this tap');
         return;
@@ -368,7 +601,7 @@ export const useWalkCandidateFlow = create<WalkCandidateFlowState>((set, get) =>
           // walk permanently unrecordable. Hand it straight back to the flow;
           // /walk's redirect reads phase 'done' + RECORDING as "resume diary".
           append('suggestion: candidate already RECORDING — resuming the diary flow');
-          set({ suggestionPhase: 'done', activeCandidate: active });
+          set({ suggestionPhase: 'done', activeCandidate: active, tapIssuedAtMs: null });
           return;
         }
 
@@ -416,7 +649,7 @@ export const useWalkCandidateFlow = create<WalkCandidateFlowState>((set, get) =>
       }
 
       if (superseded()) return;
-      set({ suggestionPhase: 'ready', activeCandidate: active });
+      set({ suggestionPhase: 'ready', activeCandidate: active, tapIssuedAtMs: null });
     },
 
     chooseKeep: async () => {
@@ -436,7 +669,12 @@ export const useWalkCandidateFlow = create<WalkCandidateFlowState>((set, get) =>
      */
     reset: () => {
       suggestionRun += 1;
-      set({ lastDetection: null, suggestionPhase: 'idle', activeCandidate: null });
+      set({
+        lastDetection: null,
+        suggestionPhase: 'idle',
+        activeCandidate: null,
+        tapIssuedAtMs: null,
+      });
     },
   };
 });

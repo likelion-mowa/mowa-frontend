@@ -43,6 +43,13 @@ function routeNotificationTap(data: NotificationTapData): void {
   }
   lastHandledIssuedAtMs = data.issuedAtMs;
 
+  // The walk this tap is about sits next to the NOTIFICATION, not next to the
+  // tap: a cold-start tap is routed only after the session restores, and one
+  // received while signed out is held until sign-in. openSuggestion anchors its
+  // history window here. Passed verbatim — a payload with no issuedAtMs must
+  // clear an older anchor rather than let it be inherited.
+  useWalkCandidateFlow.getState().noteNotificationTap(data.issuedAtMs);
+
   const navigate = () => router.navigate('/walk');
   try {
     navigate();

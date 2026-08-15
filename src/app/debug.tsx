@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Platform, Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Link } from 'expo-router';
+import { Link, router } from 'expo-router';
 
 import {
   SECURE_KEYS,
@@ -483,6 +483,14 @@ export default function SmokeScreen() {
             }
           />
           <Row label="last candidateId" value={flow.lastDetection?.candidateId ?? '—'} />
+          <Row
+            label="tap anchor"
+            value={
+              flow.tapIssuedAtMs === null
+                ? '—'
+                : new Date(flow.tapIssuedAtMs).toLocaleTimeString()
+            }
+          />
           <Button
             title="Mock login (env creds)"
             onPress={() => void auth.devSignInWithEnvCredentials()}
@@ -523,6 +531,46 @@ export default function SmokeScreen() {
                 steps: 1200,
                 source: 'stub',
               });
+            }}
+          />
+          {/*
+            Reproduces the observer tap without waiting hours for a real
+            HealthKit fire. Both postNotification callers build byte-identical
+            userInfo, so a live tap and an observer tap are indistinguishable to
+            JS — everything downstream of the tap is provably the same path, and
+            the only thing this cannot stand in for is the fire itself.
+
+            Walk outdoors first, then press this: it wipes the buffer so no
+            local candidate exists, which is exactly the observer's situation.
+          */}
+          <Button
+            title="Observer tap 재현 — 로컬 버퍼 비우고 /walk"
+            onPress={async () => {
+              await run('storage.clear', storage.clear());
+              flow.reset();
+              flow.noteNotificationTap(Date.now());
+              router.navigate('/walk');
+            }}
+          />
+          <Text className="mt-1 text-xs text-amber-700">
+            ⚠️ 실제 로컬 산책 버퍼를 지웁니다. 지운 뒤 히스토리에 남아 있는 산책은 앱
+            입장에서 처음 보는 것이므로, 서버에 이미 후보가 있어도 하나 더 만듭니다 —
+            버그가 아니라 버퍼를 지운 결과입니다(후보 목록 API가 없어 대조가 불가능,
+            공백 1). 중복 없이 되는지 보려면 아래 &ldquo;버퍼 유지&rdquo; 버튼을 쓰세요.
+          </Text>
+          {/*
+            The at-most-once test, which the button above cannot perform: it
+            wipes the ledger, so reconcile is always right to adopt. This one
+            keeps the buffer and only anchors the run, which forces reconcile to
+            run (once the newest local candidate is older than LOCAL_MATCH_MS)
+            and then to recognise the walk as already known. Expected:
+            `unknown=0` → `nothing to adopt`, and NO new server candidate.
+          */}
+          <Button
+            title="탭 앵커만 세우고 /walk (버퍼 유지)"
+            onPress={() => {
+              flow.noteNotificationTap(Date.now());
+              router.navigate('/walk');
             }}
           />
           <Link href="/walk" asChild>

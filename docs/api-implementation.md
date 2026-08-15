@@ -5,7 +5,7 @@
 > 명세 원본: `docs/backend/api-spec.md` (최종 MVP API 14개). 계약 타입·경로 상수는
 > `src/api/types.ts`, HTTP 클라이언트는 `src/api/client.ts`.
 
-기준 시점: 기록 수정·삭제 `feature/experience-edit-delete` (2026-08-15).
+기준 시점: 옵저버 산책 reconcile `feature/observer-reconcile` (2026-08-15).
 **14개 엔드포인트 전부 연동 완료.**
 
 ## 범례
@@ -21,7 +21,7 @@
 | 1 | 로그인 (기능 13) | POST | `/auth/login` | ✅ | `client.ts` `login` (유일하게 `{ public: true }` — 여기서의 401은 자격 오류지 세션 만료가 아니다). 호출자는 `auth-store.signIn`, 화면은 `/login`. `EXPO_PUBLIC_MOCK_*`는 더 이상 앱을 구동하지 않고 /debug 버튼과 `__DEV__` 폼 프리필 전용 |
 | 2 | 내 정보 조회 (기능 13) | GET | `/users/me` | ✅ | `client.ts` `getMe`. `auth-store`가 ① 부팅 시 저장된 토큰 검증 ② 로그인 직후에 호출해 `user`를 채운다. 기록장 헤더는 그 값을 읽을 뿐 따로 요청하지 않는다. 실패해도 오류 화면 없이 "나의 기록장"으로 폴백 |
 | 3 | 내 정보 수정 (기능 13) | PATCH | `/users/me` | ✅ | `client.ts` `updateMe`. `auth-store.updateNickname`이 호출, 화면은 `/settings` 프로필 카드. 빈 값·30자 초과는 왕복 없이 클라이언트가 거른다 |
-| 4 | 산책 후보 생성 (기능 1) | POST | `/walk-candidates` | ✅ | `client.ts` `createWalkCandidate`. 감지 플로우(`walk-candidate-store`)가 WalkEvent 수신 시 호출. 감지기가 **산책 종료를 판정한 뒤** 1회 발화하므로 POST 시점도 산책 종료 직후이고, 받은 candidateId를 SQLite `walks.candidateId`에 스탬핑. POST 실패 시에도 감지는 candidateId=null로 로컬 보존 |
+| 4 | 산책 후보 생성 (기능 1) | POST | `/walk-candidates` | ✅ | `client.ts` `createWalkCandidate`. 감지 플로우(`walk-candidate-store`)가 WalkEvent 수신 시 호출. 감지기가 **산책 종료를 판정한 뒤** 1회 발화하므로 POST 시점도 산책 종료 직후이고, 받은 candidateId를 SQLite `walks.candidateId`에 스탬핑. POST 실패 시에도 감지는 candidateId=null로 로컬 보존. **호출자는 둘** — 실시간 감지 이벤트와, `/walk` 진입 시의 reconcile(옵저버가 잡았지만 JS 이벤트가 없던 산책을 `queryHistory`로 복구). 두 경로를 합쳐 **감지된 산책 하나당 POST는 최대 1회**이며 로컬 버퍼가 그 대장이다 (공백 5) |
 | 5 | 산책 후보 조회 (기능 1) | GET | `/walk-candidates/{candidateId}` | ✅ | `client.ts` `getWalkCandidate`. `/walk` 진입 시 서버 상태를 재확인해 스테일 탭(이미 `RECORDING`/`SKIPPED`)을 판별하고 홈으로 되돌린다. 목록 API가 없어 서버 상태를 아는 유일한 경로 |
 | 6 | 산책 후보 변경 (기능 1) | PATCH | `/walk-candidates/{candidateId}` | ✅ | `client.ts` `updateWalkCandidate`, 호출자는 전부 `walk-candidate-store`. ① 감지 직후 종료값(detectedEndAt·durationSeconds) ② `/walk` 진입 시 `SUGGESTED` ③ 남기기 `RECORDING`(종료값 없으면 동반 전송) ④ 건너뛰기 `SKIPPED` |
 | 7 | 경험 초안 생성 (기능 2) | POST | `/walk-candidates/{candidateId}/experience-drafts` | ✅ | `client.ts` `createExperienceDraft`. `diary-flow-store`의 첫 generate()가 사용자가 설정한 입력만 담아 호출 (미입력 값은 생략 — 명세의 "서버가 임의로 생성하지 않는다") |
@@ -70,6 +70,15 @@ UserDefaults가 원본이고 `SecureStorePort`가 웹·첫 페인트용 사본�
    로컬 보관해야 하고, 로컬 데이터 유실 시 서버의 후보를 되찾을 수 없다.
    → **처분: 보류.** 후보는 스테이징 데이터고, 과거 후보를 탐색하는 제품 기능이
    없다. 그런 기능이 생기는 시점에 목록 API를 백엔드에 요청한다.
+   **2026-08-15 보강**: 로컬 버퍼가 이제 reconcile의 대장이기도 하다. 버퍼가 비면
+   서버 후보를 되찾지 못하는 것에 더해 "산책당 POST 1회" 보장까지 잃으므로,
+   `reconcileFromHistory`는 버퍼를 열지 못하면 **실행을 거부**하고 로그만 남긴다.
+   버퍼가 열리지만 **비어 있는** 경우(재설치, `/debug`의 버퍼 비우기)는 다르다:
+   히스토리에 남은 산책이 앱 입장에서 처음 보는 것이 되어, 서버에 이미 후보가 있어도
+   하나 더 만든다. 목록 API가 없으니 **클라이언트가 확인할 방법이 원리적으로 없다** —
+   불변식은 "버퍼가 그 산책을 기억하는 한"까지가 한계다. 실측 2026-08-15: 같은 산책에
+   버퍼를 지운 채 재현하면 `unknown=1`로 채택되고, 지우지 않으면 `unknown=0`으로
+   건너뛴다. 멱등 키가 생기면 이 한계도 같이 사라진다.
 2. **산책 종료값의 출처가 미정이었다.** 명세는 종료 판단을 클라이언트에 위임하고
    ("기술 구현 단계에서 결정할 사항"), 기능 5는 종료 시각·지속 시간 없는
    Candidate의 경험 확정을 거부한다.
@@ -105,10 +114,34 @@ UserDefaults가 원본이고 `SecureStorePort`가 웹·첫 페인트용 사본�
      "Plant bogus token (force 401)" 버튼이 재현 수단이다.
 5. **`POST /walk-candidates`에 멱등 키가 없다** — 같은 감지를 재전송하면 중복
    후보가 생긴다.
-   → **처분: 무해 판정.** 후보는 스테이징 데이터라 중복이 생겨도 사용자에게
-   보이지 않고(목록 API 없음) 아무것도 깨지지 않는다. 이 판정은 클라이언트가
-   재시도하지 않는 동안에만 성립 — 재시도·유실 복구(reconcile)를 도입하는
-   시점에 재고한다.
+   → **처분: 무해 판정 유지, 근거 교체 (2026-08-15, `feature/observer-reconcile`).**
+   예고대로 reconcile을 도입했으므로 "클라이언트가 재시도하지 않는다"는 옛 근거는
+   더 이상 성립하지 않는다. 대신 **불변식**으로 대체한다:
+
+   > **감지된 산책 하나당 `POST /walk-candidates`는 영구히 최대 1회.**
+
+   이를 지키는 장치 넷 —
+   - **대장은 POST 전에 쓴다.** `handleWalkEvent`가 감지를 받자마자
+     `candidateId: null`로 로컬 행을 먼저 넣고, 응답이 오면 같은 id에 덮어쓴다
+     (`INSERT OR REPLACE`).
+     **실측(2026-08-15, 954걸음 실제 산책)**: 예전처럼 POST *뒤에만* 쓰면, 요청이 떠
+     있는 동안 그 산책은 대장에 없어 `isKnownLocally`에게 보이지 않는다. 그 창에
+     reconcile이 끼어들어 같은 산책을 다시 채택했고 **시작·종료가 동일한 후보 2개**가
+     생겼다(`d0a6a486`·`cbef9bce`). 당시엔 폰이 LAN 밖이라 창이 3분이었지만, 실사용
+     에서도 산책 종료 직후 알림을 빨리 탭하면 같은 일이 난다 — 직전 후보가 20분보다
+     오래됐으면(보통의 경우) reconcile이 돌기 때문이다. 앱이 요청 도중 종료되는
+     경우까지 같이 막힌다.
+   - **로컬 버퍼가 대장이다.** `isKnownLocally`가 후보 행을 `candidateId`가 null인
+     것까지 **전부** 대조한다. 즉 POST가 실패한 감지는 **재시도하지 않는다**.
+     의도적인 손실이다: 재시도는 "서버는 커밋됐는데 응답만 유실된" 경우 정확히
+     중복을 만드는 동작이고, 그게 이 공백이 경고하던 바로 그 재시도다.
+   - **중복 판정은 구간 겹침**이지 id 일치가 아니다. 실시간 경로는 180초 미만
+     정지를 한 산책으로 흡수하지만 히스토리 조회는 non-walking 행마다 끊으므로
+     한 산책이 여러 행으로 쪼개지고, `retro-<epochSec>`는 탭마다 안정적이지도 않다.
+   - **single-flight.** 알림 탭이 `/walk`를 두 번 마운트하는 것이 실측돼 있어
+     (2026-08-14) 동시 두 런이 각각 POST할 수 있었다. 모듈 스코프 프로미스로 묶었다.
+
+   멱등 키가 생기면 이 장치들 대신 키를 쓰고 실패한 POST의 재시도를 열 수 있다.
 6. **예외별 HTTP 상태 매핑이 부분적이다** (명시된 것: 기능 5 중복 확정 409,
    목록 쿼리 조합 400, 인증 401, 소유권/부재 404 — 나머지는 mock의 자체 판단).
    → **처분: 인지 상태 유지.** 실백엔드 연결 시 mock과 대조한다.
@@ -136,6 +169,31 @@ UserDefaults가 원본이고 `SecureStorePort`가 웹·첫 페인트용 사본�
    버려서 어떤 호출자도 본문에 의존할 수 없게 했다. 두 함수의 반환 타입이
    `ApiResult<null>`인 것이 그 계약의 타입 수준 선언이다. 실백엔드 연결 시
    실제 상태 코드를 확인하고, 확정되면 이 항목을 닫는다.
+
+## reconcile이 구하지 못하는 산책 (2026-08-15)
+
+옵저버 알림 탭은 이제 `queryHistory`로 산책을 되찾지만, 그 히스토리는
+**CMMotionActivity**가 원본이다(`retrospectiveEvents`). HealthKit이 아니다.
+그래서 다음은 구조적으로 복구되지 않는다. 데모에서 "알림을 눌렀는데 홈으로
+튕겼다"가 나오면 아래 중 하나이며, 이제 `/debug`의 flow 로그에 이유가 남는다.
+
+1. **CMMotionActivity가 `walking`으로 분류하지 못한 걷기** — 실내 보행, 러닝머신,
+   가방·유모차·카트 안의 폰, 느린 걸음. 걸음 파이프라인이 동작 분류기보다 민감해서
+   이 부류는 **옵저버를 확실히 발화시키고 reconcile은 확실히 빈손이다.** 남은 감지
+   과제(C9)와 같은 뿌리이며, reconcile은 이걸 고치지 않는다.
+2. **60초 미만 구간** — `retrospectiveEvents`가 하드코딩으로 버린다. 옵저버 기준은
+   30보(≈20~25초)라, 발화는 시키지만 히스토리에는 안 보이는 대역이 존재한다.
+3. **여러 조각으로 쪼개져 어느 조각도 60초를 못 넘는 산책** — 서고 가기를 반복하는
+   쇼핑, 실내 복도.
+4. **Apple Watch·타 앱이 기록한 걸음** — 폰 모션 코프로세서에 대응 기록이 없다.
+5. **탭 시점에 아직 진행 중인 산책** — 닫힌 구간만 나온다.
+6. **POST가 실패했던 감지** — 공백 5의 불변식에 따라 의도적으로 재시도하지 않는다.
+
+**측정 방법.** Core의 `observer_steps total=… delta=…`(발화)와 새 로그
+`reconcile: history rows=… window=… unknown=…`(복구 시도)가 분모와 분자다.
+`healthkit-observer` 단독으로 하루 돌리면 실제 구제율이 숫자로 나온다 — 지금 이
+문서에 비율을 적지 않는 이유는, 이 리포에 **옵저버 단독 알림의 실측이 아직 0건**이기
+때문이다(기존 측정은 전부 실시간 계층이 살아 있어 옵저버가 중재로 억제됐다).
 
 ## 목록 필터 처분 (2026-08-14)
 
