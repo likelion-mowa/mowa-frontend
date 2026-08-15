@@ -62,6 +62,13 @@ function clockFor(date: Date): string {
  * There is no location: the detector reports none (locationSummary is always
  * null), so the prototype's 망원동 has no real counterpart.
  */
+/**
+ * Carries the pending card's fill and radius so its colored shadow has an
+ * opaque surface to come off. `rounded-2xl` is 16, and the two must match or
+ * the glow traces a square around the rounded card on web.
+ */
+const glowSurface = { borderRadius: 16, backgroundColor: colors.sage } as const;
+
 function PendingCard({ detection }: { detection: DetectedWalk }) {
   const { scale, onPressIn, onPressOut } = usePressScale();
 
@@ -80,19 +87,39 @@ function PendingCard({ detection }: { detection: DetectedWalk }) {
       onPress={() => router.push('/walk')}
       onPressIn={onPressIn}
       onPressOut={onPressOut}>
-      <Animated.View style={[{ transform: [{ scale }] }, shadows.ctaGlow]}>
-        <View className="flex-row items-center gap-3 rounded-2xl bg-sage p-4">
-          <View className="h-[42px] w-[42px] items-center justify-center rounded-full border-[1.5px] border-white/35 bg-white/25">
-            <MowaFace size={30} />
+      {/*
+        Two nested views on purpose. The glow must sit on a view that is opaque
+        and unclipped — iOS draws no shadow for a transparent view (the trap
+        PR #19 hit on the glass bar), and `overflow: hidden` on that same view
+        would clip the glow away. So the outer one carries the sage fill, the
+        matching radius and the shadow, and the inner one does the clipping.
+        No className on Animated.View: unverified on this stack, see PhotoTile.
+      */}
+      <Animated.View style={[{ transform: [{ scale }] }, glowSurface, shadows.detectionGlow]}>
+        <View className="overflow-hidden rounded-2xl border border-white/15 bg-sage">
+          {/*
+            The prototype's glass sheen (App.tsx:1224-1231): a lighter top half
+            ending in a hard edge at the midpoint, which is why the last two
+            stops share an offset. Sits under the content, over the fill.
+          */}
+          <LinearGradient
+            colors={['rgba(255,255,255,0.18)', 'rgba(255,255,255,0.04)', 'rgba(255,255,255,0)']}
+            locations={[0, 0.5, 0.5]}
+            style={StyleSheet.absoluteFill}
+          />
+          <View className="flex-row items-center gap-3 p-4">
+            <View className="h-[42px] w-[42px] items-center justify-center rounded-full border-[1.5px] border-white/35 bg-white/25">
+              <MowaFace size={30} />
+            </View>
+            <View className="flex-1">
+              <Text className="mb-0.5 text-xs font-semibold tracking-wide text-white/75">
+                {relativeLabel(detection.endedAtMs ?? detection.startedAtMs, Date.now())} 산책이
+                감지되었어요
+              </Text>
+              <Text className="text-sm font-bold text-white">{summary}</Text>
+            </View>
+            <IcChevronRight size={16} color="rgba(255,255,255,0.6)" />
           </View>
-          <View className="flex-1">
-            <Text className="mb-0.5 text-xs font-semibold tracking-wide text-white/75">
-              {relativeLabel(detection.endedAtMs ?? detection.startedAtMs, Date.now())} 산책이
-              감지되었어요
-            </Text>
-            <Text className="text-sm font-bold text-white">{summary}</Text>
-          </View>
-          <IcChevronRight size={16} color="rgba(255,255,255,0.6)" />
         </View>
       </Animated.View>
     </Pressable>

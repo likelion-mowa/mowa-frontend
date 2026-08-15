@@ -40,6 +40,18 @@ export const shadows = {
     shadowOpacity: 0.3,
     shadowRadius: 8,
   },
+  /**
+   * Prototype `0 4px 20px rgba(96,149,60,0.45)` on the home detection card
+   * (App.tsx:1218). Deliberately not ctaGlow: that one is the generic green
+   * button glow and this card is bloomier — the prototype also stacks a blurred
+   * radial behind it, which a wider, stronger colored shadow stands in for.
+   */
+  detectionGlow: {
+    shadowColor: palette.sage,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.45,
+    shadowRadius: 10,
+  },
   /** Prototype `0 2px 8px rgba(96,149,60,0.4)` on the small sage badges. */
   badgeGlow: {
     shadowColor: palette.sage,
