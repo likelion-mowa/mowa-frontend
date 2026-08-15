@@ -122,6 +122,46 @@ export type LocationPermission = {
   background: PermissionState;
 };
 
+/**
+ * One reverse-geocoded address.
+ *
+ * Mirrors expo-location's `LocationGeocodedAddress` rather than importing it,
+ * because this file must stay platform-free. Android-only fields are omitted:
+ * `platforms` in app.json is ios and web.
+ *
+ * Every field is nullable and none is documented as carrying a specific
+ * administrative level, so which one holds a Korean 행정동 ("망원동") is a
+ * device measurement, not a documented fact — see `/debug`.
+ */
+export type GeocodedAddress = {
+  city: string | null;
+  district: string | null;
+  streetNumber: string | null;
+  street: string | null;
+  region: string | null;
+  subregion: string | null;
+  country: string | null;
+  postalCode: string | null;
+  name: string | null;
+  isoCountryCode: string | null;
+  timezone: string | null;
+};
+
+/** A position fix plus whatever reverse geocoding made of it. */
+export type PlaceReading = {
+  latitude: number;
+  longitude: number;
+  /** Age of the fix when it was read. A stale fix labels the wrong place. */
+  fixAgeMs: number;
+  /** Wall-clock cost of the whole read, to judge whether it can run inline. */
+  elapsedMs: number;
+  /**
+   * Empty is a normal outcome, NOT an error: reverse geocoding needs the
+   * network and Apple rate-limits it. Callers decide what an empty list means.
+   */
+  addresses: GeocodedAddress[];
+};
+
 export interface LocationPort {
   readonly isAvailable: boolean;
   getPermission(): Promise<AdapterResult<LocationPermission>>;
@@ -129,6 +169,14 @@ export interface LocationPort {
   requestForegroundPermission(): Promise<AdapterResult<LocationPermission>>;
   /** Stage 2. Only meaningful once foreground access is granted. */
   requestBackgroundPermission(): Promise<AdapterResult<LocationPermission>>;
+  /**
+   * Reads the current fix and reverse-geocodes it. iOS only.
+   *
+   * Returns the raw address list rather than a chosen summary string on
+   * purpose: which field carries the neighbourhood name is exactly what /debug
+   * is measuring, and an adapter that picked one would leave nothing to measure.
+   */
+  getCurrentPlace(): Promise<AdapterResult<PlaceReading>>;
 }
 
 /**

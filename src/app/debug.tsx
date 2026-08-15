@@ -12,6 +12,7 @@ import {
   storage,
   walkDetector,
   type AdapterResult,
+  type PlaceReading,
 } from '@/adapters';
 import { setAccessToken } from '@/api/client';
 import {
@@ -25,6 +26,7 @@ import {
   type ListWalkExperiencesQuery,
 } from '@/api/types';
 import { kstMonthRange, kstNow, kstYearRange } from '@/lib/kst';
+import { pickLocationSummary } from '@/lib/location-summary';
 import { useAuth } from '@/stores/auth-store';
 import { useDiagnostics } from '@/stores/diagnostics-store';
 import { useDiaryFlow } from '@/stores/diary-flow-store';
@@ -86,6 +88,10 @@ export default function SmokeScreen() {
   const diary = useDiaryFlow();
   const experiences = useExperiences();
   const [probeLines, setProbeLines] = useState<string[]>([]);
+  // Local rather than in diagnostics-store: this is a one-off measurement read
+  // off the screen, with no reason to outlive the mount.
+  const [place, setPlace] = useState<PlaceReading | null>(null);
+  const [placeStatus, setPlaceStatus] = useState<string | null>(null);
 
   const runProbe = async (query: ListWalkExperiencesQuery) => {
     const result = await experiences.probeListQuery(query);
@@ -225,6 +231,59 @@ export default function SmokeScreen() {
               if (v) set('locationPermission', v);
             }}
           />
+
+          <View className="h-3" />
+          <Button
+            title="Read current place (reverse geocode)"
+            onPress={async () => {
+              // Not run(): the error text has to reach the screen, and the Log
+              // section is far below the fold. Measured 2026-08-15 — a read that
+              // never answered was indistinguishable from a dead button.
+              setPlaceStatus('reading…');
+              setPlace(null);
+              const result = await location.getCurrentPlace();
+              if (result.ok) {
+                append(`location.getCurrentPlace: ok ${JSON.stringify(result.value)}`);
+                setPlace(result.value);
+                setPlaceStatus('ok');
+              } else {
+                append(`location.getCurrentPlace: FAILED — ${result.error}`);
+                setPlaceStatus(result.error);
+              }
+            }}
+          />
+          {placeStatus !== null && <Row label="last read" value={placeStatus} />}
+          {place !== null && (
+            <>
+              <Row
+                label="coords"
+                value={`${place.latitude.toFixed(5)}, ${place.longitude.toFixed(5)}`}
+              />
+              <Row label="fix age" value={`${place.fixAgeMs} ms`} />
+              <Row label="elapsed" value={`${place.elapsedMs} ms`} />
+              <Row label="addresses" value={String(place.addresses.length)} />
+              {/* What the detection path would actually store, next to the raw
+                  fields it chose from. With no unit-test runner in this repo,
+                  running the picker on a real geocode here is the verification
+                  — and it is the stronger one, since invented input cannot tell
+                  us what Apple returns in a given 동. */}
+              <Row
+                label="→ pickLocationSummary"
+                value={pickLocationSummary(place.addresses) ?? 'null'}
+              />
+              {/* Every field, unfiltered — which one carries the 행정동 is the
+                  whole question, so picking a subset here would beg it. */}
+              {place.addresses[0] !== undefined &&
+                Object.entries(place.addresses[0]).map(([field, value]) => (
+                  <Row key={field} label={`· ${field}`} value={value ?? '—'} />
+                ))}
+            </>
+          )}
+          <Text className="mt-2 text-xs text-neutral-500">
+            Outdoors, on a device. Read it in two different neighbourhoods before trusting a
+            field: one sample cannot tell a correct field from a lucky one. Reverse geocoding
+            needs the network, so an empty list is a normal answer, not a failure.
+          </Text>
 
           <View className="h-4" />
           <Row label="Notifications" value={state.notificationPermission} />

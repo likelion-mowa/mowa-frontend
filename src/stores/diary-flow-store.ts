@@ -169,7 +169,7 @@ export const useDiaryFlow = create<DiaryFlowState>((set, get) => {
           startedAtMs: candidate.startedAtMs,
           endedAtMs: candidate.endedAtMs,
           durationSeconds: candidate.durationSeconds,
-          locationSummary: null, // reverse geocoding is out of scope for now
+          locationSummary: candidate.locationSummary,
         },
       });
       append(`flow started for candidate ${candidate.candidateId}`);
