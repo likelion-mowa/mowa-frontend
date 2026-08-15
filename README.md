@@ -84,8 +84,22 @@ ios/                      # prebuild 산출물 — 커밋하지 않고 직접 �
 - **Node 22.6 이상** — mock 서버가 `src/api/types.ts`를 직접 import하므로
   `--experimental-strip-types`가 필요합니다.
 - npm (pnpm·yarn 금지 — symlink 때문에 Expo autolinking과 Tailwind 스캔이 깨집니다)
+- 터미널은 아무거나 괜찮습니다. Windows는 PowerShell·명령 프롬프트·Git Bash 모두 됩니다.
+
+**OS별로 할 수 있는 것이 다릅니다.**
+
+| 하고 싶은 것             | Windows | macOS |
+| ------------------------ | :-----: | :---: |
+| 웹으로 화면 검토 (1~3번) |    ✅    |   ✅   |
+| iOS 실기기 빌드 (4번)    |    ❌    |   ✅   |
+
+iOS 빌드는 Xcode가 필요해서 **macOS에서만** 됩니다. Windows에서는 1~3번으로 웹에서 화면을
+보시고, 산책 감지처럼 iOS에서만 도는 기능은 데모 영상으로 확인해 주세요
+([웹에서 볼 수 있는 것 / 없는 것](#-웹에서-볼-수-있는-것--없는-것)).
 
 ### 1. Clone & Install
+
+세 줄 모두 Windows·macOS에서 동일합니다.
 
 ```bash
 git clone https://github.com/likelion-walk-diary/walk-diary-frontend.git
@@ -93,13 +107,26 @@ cd walk-diary-frontend
 npm install
 ```
 
+> 설치 끝에 `[patch-expo-jsi] …` 로그가 찍힙니다. iOS 빌드에만 쓰는 패치라
+> Windows에서는 무시하셔도 됩니다.
+
 ### 2. 환경변수 — **생략해도 됩니다**
 
 `EXPO_PUBLIC_API_BASE_URL`의 기본값이 이미 `http://localhost:4000/api/v1`이라, 아래 로컬
-mock을 쓸 거라면 `.env` 없이 그대로 동작합니다. 값을 바꿔야 할 때만
-`.env.example`을 복사하세요 (`.env`는 커밋하지 않습니다).
+mock을 쓸 거라면 `.env` 없이 그대로 동작합니다. **웹으로 화면만 볼 거라면 이 단계는 건너뛰세요.**
 
-실기기(iOS)에서 붙일 때만 Mac의 LAN IP가 필요합니다:
+값을 바꿔야 할 때만 `.env.example`을 복사한 뒤 **에디터로 편집**합니다
+(`.env`는 커밋하지 않습니다).
+
+```bash
+copy .env.example .env    # Windows — PowerShell·명령 프롬프트 공통
+cp .env.example .env      # macOS
+```
+
+> `>` 리다이렉션으로 `.env`를 만들지 마세요. Windows PowerShell 5.1은 파일을 UTF-16으로
+> 저장해서 Expo가 값을 읽지 못합니다. 에디터로 열어 고치는 쪽이 안전합니다.
+
+**iOS 실기기에 붙일 때만** Mac의 LAN IP가 필요합니다 (아래는 macOS 전용 명령입니다):
 
 ```bash
 echo "EXPO_PUBLIC_API_BASE_URL=http://$(ipconfig getifaddr en0):4000/api/v1" > .env
@@ -110,7 +137,7 @@ echo "EXPO_PUBLIC_API_BASE_URL=http://$(ipconfig getifaddr en0):4000/api/v1" > .
 
 ### 3. 웹으로 화면 보기 (디자인 검토용)
 
-터미널 **두 개**가 필요합니다.
+터미널 **두 개**가 필요합니다. 두 명령 모두 Windows·macOS에서 동일합니다.
 
 ```bash
 npm run mock    # 터미널 1 — 로컬 mock 백엔드 (http://localhost:4000/api/v1)
@@ -118,6 +145,10 @@ npm run web     # 터미널 2 — 웹 dev 서버 (http://localhost:8081)
 ```
 
 브라우저에서 `http://localhost:8081`을 열고 로그인합니다.
+
+> **Windows에서 방화벽 창이 뜨면** 허용하지 않아도 됩니다. 내 PC의 브라우저에서
+> `localhost`로 접속하는 건 차단해도 그대로 동작합니다. 같은 Wi-Fi의 다른 기기에서
+> 열어볼 때만 '사설 네트워크' 허용이 필요합니다.
 
 | loginId  | password   | 데이터                                      |
 | -------- | ---------- | ------------------------------------------- |
@@ -127,7 +158,9 @@ npm run web     # 터미널 2 — 웹 dev 서버 (http://localhost:8081)
 계정과 mock의 동작 범위는 [`mock/README.md`](mock/README.md)에 있습니다.
 데이터를 시드 상태로 되돌리려면 mock을 끄고 `npm run mock:reset`을 실행하세요.
 
-### 4. iOS 실행
+### 4. iOS 실행 — **macOS + Xcode 전용**
+
+Windows에서는 이 단계를 실행할 수 없습니다. 3번까지만 하시면 됩니다.
 
 ```bash
 npm run ios:clean   # 첫 빌드 (prebuild 포함)
