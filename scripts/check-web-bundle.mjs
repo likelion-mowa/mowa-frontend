@@ -57,6 +57,12 @@ const MUST_BE_PRESENT = [
   ['diary failure headline', '산책 기억을 만들지 못했어요'],
   ['diary preview header', '산책 기억 미리보기'],
   ['home subtitle', '당신의 산책을 모와드릴까요?'],
+  // The subtitle above is CharacterHero's tagline prop: deleting the detection
+  // section leaves it untouched, so it proves the home MODULE shipped, not that
+  // this section did. This string exists nowhere but the idle card, so it is
+  // what fails when the section is gone — and the idle card is the branch web
+  // always renders, having no detector.
+  ['home detection idle', '아직 감지된 산책이 없어요'],
   ['archive subtitle', '산책 기억 모음'],
   ['archive empty state', '산책 기록이 없어요'],
   // 기능 7·8 on /experiences/[experienceId]. The detail screen never had a
