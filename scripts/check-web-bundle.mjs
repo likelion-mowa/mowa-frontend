@@ -28,11 +28,20 @@ const MUST_BE_ABSENT = [
   // Only secure-store.native.ts may import this. The web adapter is
   // localStorage and never names the package, not even in prose.
   'expo-secure-store',
+  // Only location.native.ts may import this. Unlike the others it is a real
+  // temptation on web — navigator.geolocation exists — so the guard matters:
+  // expo-location's reverse geocoding was removed in SDK 49 and resolves to an
+  // empty array there, meaning a web import would compile, pass tsc, and
+  // silently return no place at all.
+  'expo-location',
 ];
 
 /** Things whose absence means the bundle is broken or the split went too far. */
 const MUST_BE_PRESENT = [
   ['web adapter fallback copy', 'HealthKit is only available on iOS.'],
+  // Pairs with 'expo-location' above: absence alone would also be satisfied by
+  // a web location adapter that failed to ship at all.
+  ['web location fallback copy', 'Reading a place requires CoreLocation and is iOS-only.'],
   ['storage key', 'mowa.walks.v2'],
   ['Companion code', 'WITH_SOMEONE'],
   ['Emotion code', 'PENSIVE'],
