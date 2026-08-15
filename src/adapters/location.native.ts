@@ -2,6 +2,7 @@ import * as Location from 'expo-location';
 
 import {
   toError,
+  type GeocodedAddress,
   type LocationPermission,
   type LocationPort,
   type PermissionState,
@@ -41,6 +42,27 @@ async function readPermission(): Promise<LocationPermission> {
   };
 }
 
+/**
+ * Copied field by field rather than spread, so the expo type never leaks past
+ * this file and a field disappearing upstream fails to compile here instead of
+ * turning into a silent `undefined` on a /debug row.
+ */
+function toGeocodedAddress(address: Location.LocationGeocodedAddress): GeocodedAddress {
+  return {
+    city: address.city,
+    district: address.district,
+    streetNumber: address.streetNumber,
+    street: address.street,
+    region: address.region,
+    subregion: address.subregion,
+    country: address.country,
+    postalCode: address.postalCode,
+    name: address.name,
+    isoCountryCode: address.isoCountryCode,
+    timezone: address.timezone,
+  };
+}
+
 export const location: LocationPort = {
   isAvailable: true,
 
@@ -72,6 +94,34 @@ export const location: LocationPort = {
       }
       await Location.requestBackgroundPermissionsAsync();
       return { ok: true, value: await readPermission() };
+    } catch (error) {
+      return toError(error);
+    }
+  },
+
+  async getCurrentPlace() {
+    const startedAt = Date.now();
+    try {
+      // Balanced (~100m) is the accuracy expo already defaults to, and it is
+      // the right tier for a neighbourhood name: a finer fix costs time and
+      // battery to resolve the same 동. This is a foreground read on demand and
+      // is unrelated to the detector's keepalive, which AGENTS.md forbids
+      // lowering.
+      const position = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.Balanced,
+      });
+      const addresses = await Location.reverseGeocodeAsync(position.coords);
+      return {
+        ok: true,
+        value: {
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude,
+          fixAgeMs: Date.now() - position.timestamp,
+          elapsedMs: Date.now() - startedAt,
+          // An empty list is reported as success on purpose — see PlaceReading.
+          addresses: addresses.map(toGeocodedAddress),
+        },
+      };
     } catch (error) {
       return toError(error);
     }

@@ -12,6 +12,7 @@ import {
   storage,
   walkDetector,
   type AdapterResult,
+  type PlaceReading,
 } from '@/adapters';
 import { setAccessToken } from '@/api/client';
 import {
@@ -86,6 +87,9 @@ export default function SmokeScreen() {
   const diary = useDiaryFlow();
   const experiences = useExperiences();
   const [probeLines, setProbeLines] = useState<string[]>([]);
+  // Local rather than in diagnostics-store: this is a one-off measurement read
+  // off the screen, with no reason to outlive the mount.
+  const [place, setPlace] = useState<PlaceReading | null>(null);
 
   const runProbe = async (query: ListWalkExperiencesQuery) => {
     const result = await experiences.probeListQuery(query);
@@ -225,6 +229,38 @@ export default function SmokeScreen() {
               if (v) set('locationPermission', v);
             }}
           />
+
+          <View className="h-3" />
+          <Button
+            title="Read current place (reverse geocode)"
+            onPress={async () => {
+              // run() returns null on failure, which clears a previous reading
+              // instead of leaving a stale one on screen next to a fresh error.
+              setPlace(await run('location.getCurrentPlace', location.getCurrentPlace()));
+            }}
+          />
+          {place !== null && (
+            <>
+              <Row
+                label="coords"
+                value={`${place.latitude.toFixed(5)}, ${place.longitude.toFixed(5)}`}
+              />
+              <Row label="fix age" value={`${place.fixAgeMs} ms`} />
+              <Row label="elapsed" value={`${place.elapsedMs} ms`} />
+              <Row label="addresses" value={String(place.addresses.length)} />
+              {/* Every field, unfiltered — which one carries the 행정동 is the
+                  whole question, so picking a subset here would beg it. */}
+              {place.addresses[0] !== undefined &&
+                Object.entries(place.addresses[0]).map(([field, value]) => (
+                  <Row key={field} label={`· ${field}`} value={value ?? '—'} />
+                ))}
+            </>
+          )}
+          <Text className="mt-2 text-xs text-neutral-500">
+            Outdoors, on a device. Read it in two different neighbourhoods before trusting a
+            field: one sample cannot tell a correct field from a lucky one. Reverse geocoding
+            needs the network, so an empty list is a normal answer, not a failure.
+          </Text>
 
           <View className="h-4" />
           <Row label="Notifications" value={state.notificationPermission} />
