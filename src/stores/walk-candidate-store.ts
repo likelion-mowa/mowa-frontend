@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 
-import { storage, walkDetector, type DetectedWalk, type WalkEvent } from '@/adapters';
+import { location, storage, walkDetector, type DetectedWalk, type WalkEvent } from '@/adapters';
 import { api, hasAccessToken } from '@/api/client';
 import {
   fromIsoDateTime,
@@ -8,6 +8,7 @@ import {
   type CandidateStatus,
   type UpdateWalkCandidateRequest,
 } from '@/api/types';
+import { pickLocationSummary } from '@/lib/location-summary';
 
 /**
  * The detect → candidate → suggestion flow.
@@ -60,6 +61,12 @@ export type ActiveCandidate = {
   endedAtMs: number | null;
   durationSeconds: number | null;
   endSource: EndSource | null;
+  /**
+   * Carried through so the diary flow can show it: /diary/preview and
+   * /diary/done render before any `walk_experiences` row exists, so the server
+   * is not a source for them and this is the only path the value has.
+   */
+  locationSummary: string | null;
   /** null when the server could not be reached — the buttons retry from scratch. */
   serverStatus: CandidateStatus | null;
   /** True once the server holds a non-null detectedEndAt for this candidate. */
@@ -168,6 +175,21 @@ function isKnownLocally(row: WalkEvent, stored: DetectedWalk[]): boolean {
   );
 }
 
+/**
+ * How recent a walk's end must be for "where I am now" to be a fair label.
+ *
+ * Deliberately a check on the walk's clock, not on `event.source`. Reconcile
+ * adopts walks up to RECONCILE_WINDOW_MS (3 hours) old, and stamping those with
+ * the current position would put the wrong neighbourhood on them — but a
+ * retrospective row whose walk ended two minutes ago deserves the label as much
+ * as a live one does, and a synthetic /debug event is by construction "now",
+ * which is what keeps this path testable without walking for twenty minutes.
+ *
+ * The live path fires only after the Core's end debounce (~180s), so the bound
+ * has to clear that comfortably or real walks would be excluded.
+ */
+const PLACE_FRESHNESS_MS = 10 * 60 * 1000;
+
 /** Server-side CHECK: detected_end_at >= detected_start_at, duration >= 0. */
 function toEndPatch(
   startedAtMs: number,
@@ -196,6 +218,37 @@ export const useWalkCandidateFlow = create<WalkCandidateFlowState>((set, get) =>
     if (init.ok) storageReady = true;
     else append(`storage.init FAILED — ${init.error}`);
     return storageReady;
+  };
+
+  /**
+   * "Where am I now" as this walk's place, or null whenever that would be a lie
+   * or is simply unavailable — on web, without permission, with no fix, or when
+   * the geocoder names no administrative level.
+   *
+   * Every one of those paths is logged: a location that silently never appears
+   * is indistinguishable from one the user's phone cannot produce, and that
+   * ambiguity is the failure class this repo pays most for.
+   */
+  const readPlaceSummary = async (event: WalkEvent): Promise<string | null> => {
+    const ageMs = Date.now() - (event.endedAtMs ?? event.startedAtMs);
+    if (ageMs > PLACE_FRESHNESS_MS) {
+      append(`place skipped — walk ended ${Math.round(ageMs / 60000)}min ago`);
+      return null;
+    }
+
+    const read = await location.getCurrentPlace();
+    if (!read.ok) {
+      append(`place FAILED — ${read.error}`);
+      return null;
+    }
+
+    const summary = pickLocationSummary(read.value.addresses);
+    append(
+      summary === null
+        ? `place: no usable field in ${read.value.addresses.length} address(es)`
+        : `place: ${summary} (fix ${read.value.fixAgeMs}ms, read ${read.value.elapsedMs}ms)`,
+    );
+    return summary;
   };
 
   /**
@@ -408,7 +461,7 @@ export const useWalkCandidateFlow = create<WalkCandidateFlowState>((set, get) =>
         startedAtMs: event.startedAtMs,
         endedAtMs: event.endedAtMs,
         steps: event.steps,
-        locationSummary: null, // reverse geocoding is out of scope for now
+        locationSummary: null, // read below, once the ledger claim is safe
         candidateId: null,
       };
 
@@ -435,12 +488,26 @@ export const useWalkCandidateFlow = create<WalkCandidateFlowState>((set, get) =>
       // detection vanishes from the buffer entirely.
       await store(detected);
 
+      // Strictly after the claim above, never before it: the read can take up
+      // to its own 8s timeout, and the at-most-once invariant depends on the
+      // ledger row existing before anything slow happens. The cost is that the
+      // POST below can be delayed by that much — acceptable because the
+      // detector's keepalive holds CoreLocation open, so a fix is already in
+      // hand when a walk ends (measured: 122ms, on a 2.8s-old fix).
+      detected.locationSummary = await readPlaceSummary(event);
+
       // No session: the detection stays in the local buffer and never becomes
       // a server candidate. Detection runs app-wide, so this is reachable
       // whenever the token expired while the app was in the background.
       if (hasAccessToken()) {
         const created = await api.createWalkCandidate({
           detectedStartAt: toIsoDateTime(event.startedAtMs),
+          // Omitted rather than sent as null when there is none, matching how
+          // the draft POST treats unset input: the spec has the server invent
+          // nothing, and an absent key says that more plainly than a null.
+          ...(detected.locationSummary === null
+            ? {}
+            : { locationSummary: detected.locationSummary }),
         });
         if (created.ok) {
           detected.candidateId = created.value.candidateId;
@@ -569,6 +636,7 @@ export const useWalkCandidateFlow = create<WalkCandidateFlowState>((set, get) =>
             ? null
             : toEndPatch(local.startedAtMs, local.endedAtMs).durationSeconds,
         endSource: local.endedAtMs === null ? null : 'detector',
+        locationSummary: local.locationSummary,
         serverStatus: null,
         endSyncedToServer: false,
       };
@@ -580,6 +648,12 @@ export const useWalkCandidateFlow = create<WalkCandidateFlowState>((set, get) =>
         const server = fetched.value;
         active.serverStatus = server.status;
         active.endSyncedToServer = server.detectedEndAt !== null;
+        // The server's copy wins when it has one. A notification tapped after
+        // the app was killed rebuilds `local` from SQLite, and a buffer that
+        // lost the row leaves it null while the server still holds the value.
+        // Guarded rather than assigned outright so a server null cannot erase a
+        // value the POST failed to carry.
+        if (server.locationSummary !== null) active.locationSummary = server.locationSummary;
         if (server.detectedEndAt !== null) {
           // The server's copy wins for display: it is what 기능 5 will read.
           active.endedAtMs = fromIsoDateTime(server.detectedEndAt);

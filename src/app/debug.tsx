@@ -26,6 +26,7 @@ import {
   type ListWalkExperiencesQuery,
 } from '@/api/types';
 import { kstMonthRange, kstNow, kstYearRange } from '@/lib/kst';
+import { pickLocationSummary } from '@/lib/location-summary';
 import { useAuth } from '@/stores/auth-store';
 import { useDiagnostics } from '@/stores/diagnostics-store';
 import { useDiaryFlow } from '@/stores/diary-flow-store';
@@ -261,6 +262,15 @@ export default function SmokeScreen() {
               <Row label="fix age" value={`${place.fixAgeMs} ms`} />
               <Row label="elapsed" value={`${place.elapsedMs} ms`} />
               <Row label="addresses" value={String(place.addresses.length)} />
+              {/* What the detection path would actually store, next to the raw
+                  fields it chose from. With no unit-test runner in this repo,
+                  running the picker on a real geocode here is the verification
+                  — and it is the stronger one, since invented input cannot tell
+                  us what Apple returns in a given 동. */}
+              <Row
+                label="→ pickLocationSummary"
+                value={pickLocationSummary(place.addresses) ?? 'null'}
+              />
               {/* Every field, unfiltered — which one carries the 행정동 is the
                   whole question, so picking a subset here would beg it. */}
               {place.addresses[0] !== undefined &&

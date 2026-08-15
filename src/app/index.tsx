@@ -59,8 +59,9 @@ function clockFor(date: Date): string {
  * `/walk` re-resolves everything on entry and bounces stale taps home, so this
  * is a shortcut to it, never an authority on it.
  *
- * There is no location: the detector reports none (locationSummary is always
- * null), so the prototype's 망원동 has no real counterpart.
+ * The location is real now — reverse-geocoded when the walk ends — but it stays
+ * optional: it is absent on web, without a fix, and on walks reconciled long
+ * after the fact, so the card composes its summary from whatever it has.
  */
 /**
  * Carries the pending card's fill and radius so its colored shadow has an
@@ -76,8 +77,10 @@ function PendingCard({ detection }: { detection: DetectedWalk }) {
     detection.endedAtMs === null
       ? null
       : Math.round((detection.endedAtMs - detection.startedAtMs) / 1000);
+  // Ordered as the prototype's card reads it: 43분 · 망원동 · 오후 3:42.
   const summary = [
     ...(durationSeconds === null ? [] : [formatDurationMinutes(durationSeconds)]),
+    ...(detection.locationSummary === null ? [] : [detection.locationSummary]),
     formatTime(detection.startedAtMs),
   ].join(' · ');
 
