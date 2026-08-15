@@ -30,11 +30,30 @@ const GLASS = {
 // the bar opaque on device. Worth a look during the device review.
 const BLUR_INTENSITY = 70;
 
+/**
+ * Both glass surfaces are 52 tall and fully rounded, so one radius drives the
+ * BlurView's clip AND the shadow wrapper's shape below.
+ */
+const GLASS_RADIUS = 26;
+
+/**
+ * Carried by the wrapper AROUND each BlurView, never by the BlurView itself —
+ * a view that clips its children cannot also cast a shadow on iOS.
+ *
+ * `borderRadius` is part of the shadow, not decoration: react-native-web turns
+ * these props into a CSS `box-shadow`, and a box-shadow follows the radius of
+ * the element it sits on — not the radius of the rounded child inside it. With
+ * the wrapper left square, web drew a rectangular halo behind every round
+ * button while iOS looked correct (measured 2026-08-15). The wrapper is
+ * transparent, so the radius costs nothing on iOS beyond making its shadow path
+ * match what the user actually sees.
+ */
 const glassShadow = {
   shadowColor: '#000000',
   shadowOffset: { width: 0, height: 6 },
   shadowOpacity: 0.22,
   shadowRadius: 24,
+  borderRadius: GLASS_RADIUS,
 };
 
 /**
@@ -84,7 +103,7 @@ export function GlassCircleButton({
           style={{
             height: 52,
             width: 52,
-            borderRadius: 26,
+            borderRadius: GLASS_RADIUS,
             borderWidth: 1,
             borderColor: GLASS.circleBorder,
             overflow: 'hidden',
@@ -107,7 +126,7 @@ export function GlassPill({ children }: { children: ReactNode }) {
         tint="light"
         style={{
           height: 52,
-          borderRadius: 26,
+          borderRadius: GLASS_RADIUS,
           borderWidth: 1,
           borderColor: GLASS.pillBorder,
           overflow: 'hidden',
