@@ -10,6 +10,7 @@
     "platforms": ["ios", "web"],
     "ios": {
       "bundleIdentifier": "com.mowa.app",
+      "buildNumber": "1",
       "supportsTablet": false,
       "entitlements": {
         "com.apple.developer.healthkit": true,
