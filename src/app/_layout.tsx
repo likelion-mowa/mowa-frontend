@@ -1,5 +1,5 @@
-import { useEffect } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { useEffect, useRef, type PropsWithChildren } from 'react';
+import { Animated, Platform, StyleSheet, View } from 'react-native';
 import { router, Stack, usePathname } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
@@ -102,6 +102,49 @@ function useNotificationTapRouting(signedIn: boolean): void {
   }, [signedIn]);
 }
 
+/**
+ * Fades each new route in — web only.
+ *
+ * The web build has no screen transition at all. react-native-screens ships
+ * `const ScreenStack = View` for web (components/ScreenStack.web.js) and its
+ * `Screen.web.js` only toggles `display: flex | none`, so the `animation`
+ * options on the Stack.Screens below are silently dropped and routes swap
+ * between two frames. Measured 2026-08-15: through a home → archive navigation
+ * not one element in the tree carried a transform.
+ *
+ * This does not bring the native slide back — that needs the library to
+ * implement a real stack on web. It removes the jump cut, which is what the
+ * missing transition actually costs the reviewer.
+ *
+ * Native is deliberately untouched: it already runs the real transition, and
+ * layering this on top would play two animations for one navigation.
+ */
+function RouteTransition({ children }: PropsWithChildren) {
+  const pathname = usePathname();
+  const opacity = useRef(new Animated.Value(1)).current;
+  const lift = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    if (Platform.OS !== 'web') return;
+    // Restart from the hidden state on every path change; the outgoing screen is
+    // already gone by then, so there is nothing to fade out against.
+    opacity.setValue(0);
+    lift.setValue(8);
+    Animated.parallel([
+      Animated.timing(opacity, { toValue: 1, duration: 220, useNativeDriver: true }),
+      Animated.timing(lift, { toValue: 0, duration: 220, useNativeDriver: true }),
+    ]).start();
+  }, [pathname, opacity, lift]);
+
+  // Hooks above stay unconditional; only the output branches.
+  if (Platform.OS !== 'web') return <>{children}</>;
+  return (
+    <Animated.View style={{ flex: 1, opacity, transform: [{ translateY: lift }] }}>
+      {children}
+    </Animated.View>
+  );
+}
+
 export default function RootLayout() {
   const status = useAuth((state) => state.status);
   const restore = useAuth((state) => state.restore);
@@ -149,22 +192,31 @@ export default function RootLayout() {
   return (
     <>
       <StatusBar style="auto" />
-      <Stack screenOptions={{ headerShown: false }}>
-        {/*
-          Home's glass bar pushes into the archive (forward: slide from
-          right, the native-stack default for `router.push`). Every existing
-          `router.replace('/')` / `<Redirect href="/">` in the app — the
-          archive's "홈으로" button, the diary flow's abort guards, its own
-          "홈으로 돌아가기" — is a "leave and go back" action, never a forward
-          one, so replacing INTO home should animate as a pop (reverse
-          slide) instead of native-stack's default replace animation, which
-          mimics another forward push.
-        */}
-        <Stack.Screen name="index" options={{ animationTypeForReplace: 'pop' }} />
-        <Stack.Screen name="archive" options={{ animation: 'slide_from_right' }} />
-        {/* 로그아웃 replaces into onboarding, and that is a leave, not a push. */}
-        <Stack.Screen name="onboarding" options={{ animationTypeForReplace: 'pop' }} />
-      </Stack>
+      {/*
+        Wraps only the navigator. The overlay below must not fade with the
+        route — it is what hides the flash while the session restores.
+      */}
+      <RouteTransition>
+        <Stack screenOptions={{ headerShown: false }}>
+          {/*
+            Home's glass bar pushes into the archive (forward: slide from
+            right, the native-stack default for `router.push`). Every existing
+            `router.replace('/')` / `<Redirect href="/">` in the app — the
+            archive's "홈으로" button, the diary flow's abort guards, its own
+            "홈으로 돌아가기" — is a "leave and go back" action, never a forward
+            one, so replacing INTO home should animate as a pop (reverse
+            slide) instead of native-stack's default replace animation, which
+            mimics another forward push.
+
+            These options are iOS-only in practice — see RouteTransition above
+            for why web drops them.
+          */}
+          <Stack.Screen name="index" options={{ animationTypeForReplace: 'pop' }} />
+          <Stack.Screen name="archive" options={{ animation: 'slide_from_right' }} />
+          {/* 로그아웃 replaces into onboarding, and that is a leave, not a push. */}
+          <Stack.Screen name="onboarding" options={{ animationTypeForReplace: 'pop' }} />
+        </Stack>
+      </RouteTransition>
 
       {/*
         What actually prevents the flash. It covers the restore window and the

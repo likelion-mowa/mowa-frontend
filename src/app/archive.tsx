@@ -6,8 +6,8 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  useWindowDimensions,
   View,
+  type LayoutChangeEvent,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
@@ -173,8 +173,29 @@ function GridTile({ size, item }: { size: number; item: WalkExperienceListItem }
   );
 }
 
+/**
+ * The width a cell grid actually gets, measured instead of assumed.
+ *
+ * `useWindowDimensions()` stood in for this, which held only while the app
+ * filled the window. The web shell now caps the app at a phone-sized column
+ * (src/app/+html.tsx), so the window is wider than the content and a
+ * window-derived cell is too wide to fit its own row — the photo grid dropped
+ * to two columns and left the third's worth of space empty.
+ *
+ * Measuring keeps that width in exactly one place, the CSS that sets it. Doing
+ * the arithmetic against a copied `430` here would be a second source of truth
+ * that only shows up as a silently wrong column count.
+ *
+ * On iOS the container IS the window, so this measures what it always did.
+ */
+function useMeasuredWidth(): readonly [number, (event: LayoutChangeEvent) => void] {
+  const [width, setWidth] = useState(0);
+  const onLayout = (event: LayoutChangeEvent) => setWidth(event.nativeEvent.layout.width);
+  return [width, onLayout] as const;
+}
+
 function PhotoGrid({ items }: { items: WalkExperienceListItem[] }) {
-  const { width } = useWindowDimensions();
+  const [width, onLayout] = useMeasuredWidth();
   const size = (width - GRID_GAP * (GRID_COLUMNS - 1)) / GRID_COLUMNS;
 
   // Rows arrive sorted startedAt DESC, so first-seen month order is newest
@@ -192,15 +213,19 @@ function PhotoGrid({ items }: { items: WalkExperienceListItem[] }) {
   }, [items]);
 
   return (
-    <View>
-      {months.map((month) => (
-        <View key={month.key} className="flex-row flex-wrap" style={{ gap: GRID_GAP }}>
-          <MonthLabelCell size={size} parts={month.parts} />
-          {month.items.map((item) => (
-            <GridTile key={item.experienceId} size={size} item={item} />
-          ))}
-        </View>
-      ))}
+    // Nothing is drawn until the first layout reports a width — one frame, and
+    // the alternative is a flash of zero-sized tiles.
+    <View onLayout={onLayout}>
+      {width > 0
+        ? months.map((month) => (
+            <View key={month.key} className="flex-row flex-wrap" style={{ gap: GRID_GAP }}>
+              <MonthLabelCell size={size} parts={month.parts} />
+              {month.items.map((item) => (
+                <GridTile key={item.experienceId} size={size} item={item} />
+              ))}
+            </View>
+          ))
+        : null}
     </View>
   );
 }
@@ -287,8 +312,10 @@ function MonthListRow({ item }: { item: WalkExperienceListItem }) {
 }
 
 function CalendarView({ items }: { items: WalkExperienceListItem[] }) {
-  const { width } = useWindowDimensions();
-  const cell = (width - 32) / 7;
+  // Measured inside this screen's horizontal padding, which is why there is no
+  // padding constant to subtract here any more.
+  const [width, onLayout] = useMeasuredWidth();
+  const cell = width / 7;
   const [view, setView] = useState(() => {
     const now = kstNow(Date.now());
     return { year: now.year, month: now.month };
@@ -334,26 +361,32 @@ function CalendarView({ items }: { items: WalkExperienceListItem[] }) {
         </Pressable>
       </View>
 
-      <View className="mb-1 flex-row">
-        {WEEKDAYS.map((label) => (
-          <Text
-            key={label}
-            style={{ width: cell }}
-            className="py-1 text-center text-[10px] font-semibold text-ink-subtle">
-            {label}
-          </Text>
-        ))}
-      </View>
+      <View onLayout={onLayout}>
+        {width > 0 ? (
+          <>
+            <View className="mb-1 flex-row">
+              {WEEKDAYS.map((label) => (
+                <Text
+                  key={label}
+                  style={{ width: cell }}
+                  className="py-1 text-center text-[10px] font-semibold text-ink-subtle">
+                  {label}
+                </Text>
+              ))}
+            </View>
 
-      <View className="flex-row flex-wrap">
-        {Array.from({ length: leading }, (_, index) => (
-          <View key={`blank-${index}`} style={{ width: cell, height: cell }} />
-        ))}
-        {Array.from({ length: total }, (_, index) => index + 1).map((day) => (
-          <View key={day} style={{ width: cell }} className="mb-1">
-            <CalendarDayCell size={cell} day={day} walks={byDay.get(day) ?? []} />
-          </View>
-        ))}
+            <View className="flex-row flex-wrap">
+              {Array.from({ length: leading }, (_, index) => (
+                <View key={`blank-${index}`} style={{ width: cell, height: cell }} />
+              ))}
+              {Array.from({ length: total }, (_, index) => index + 1).map((day) => (
+                <View key={day} style={{ width: cell }} className="mb-1">
+                  <CalendarDayCell size={cell} day={day} walks={byDay.get(day) ?? []} />
+                </View>
+              ))}
+            </View>
+          </>
+        ) : null}
       </View>
 
       <View className="mt-4">
