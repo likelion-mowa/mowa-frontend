@@ -414,6 +414,27 @@ export const useWalkCandidateFlow = create<WalkCandidateFlowState>((set, get) =>
 
       await ensureStorage();
 
+      const store = async (row: DetectedWalk) => {
+        if (!storageReady) return;
+        const inserted = await storage.insertWalk(row);
+        if (!inserted.ok) append(`insertWalk FAILED — ${inserted.error}`);
+      };
+
+      // Claim the walk in the ledger BEFORE the POST, not only after it.
+      //
+      // Measured on device 2026-08-15: the live path detected a 954-step walk
+      // and, while its POST was still in flight, a reconcile run found no row
+      // for it and adopted the same walk again — two candidates, identical
+      // start/end. `isKnownLocally` compares against STORED rows, so a walk that
+      // exists only as an in-flight request is invisible to it, and the
+      // at-most-once invariant held only after the request came back.
+      //
+      // The id is deterministic per walk, and insertWalk is INSERT OR REPLACE,
+      // so the write below just fills in the candidateId on the same row. This
+      // also closes the smaller hole where the app is killed mid-request and the
+      // detection vanishes from the buffer entirely.
+      await store(detected);
+
       // No session: the detection stays in the local buffer and never becomes
       // a server candidate. Detection runs app-wide, so this is reachable
       // whenever the token expired while the app was in the background.
@@ -442,12 +463,11 @@ export const useWalkCandidateFlow = create<WalkCandidateFlowState>((set, get) =>
         append('no token — detection kept locally only');
       }
 
-      // The detection survives even when the server does not have it yet;
-      // a null candidateId is what marks it for a future retry/reconcile.
-      if (storageReady) {
-        const inserted = await storage.insertWalk(detected);
-        if (!inserted.ok) append(`insertWalk FAILED — ${inserted.error}`);
-      }
+      // Only when there is something new to record. A failed POST leaves the
+      // claim above as the final state: candidateId null marks a detection the
+      // server never got, and — per the at-most-once invariant — it is a record,
+      // not a retry queue.
+      if (detected.candidateId !== null) await store(detected);
 
       set({ lastDetection: detected });
     },

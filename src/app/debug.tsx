@@ -542,8 +542,25 @@ export default function SmokeScreen() {
             }}
           />
           <Text className="mt-1 text-xs text-amber-700">
-            ⚠️ 실제 로컬 산책 버퍼를 지웁니다. 서버 후보는 그대로 남습니다.
+            ⚠️ 실제 로컬 산책 버퍼를 지웁니다. 서버 후보는 그대로 남습니다. 실시간 감지의
+            POST가 아직 떠 있는 동안 누르면 대장까지 함께 지워져 중복이 생기니, 감지가
+            가라앉은 뒤에 누르세요.
           </Text>
+          {/*
+            The at-most-once test, which the button above cannot perform: it
+            wipes the ledger, so reconcile is always right to adopt. This one
+            keeps the buffer and only anchors the run, which forces reconcile to
+            run (once the newest local candidate is older than LOCAL_MATCH_MS)
+            and then to recognise the walk as already known. Expected:
+            `unknown=0` → `nothing to adopt`, and NO new server candidate.
+          */}
+          <Button
+            title="탭 앵커만 세우고 /walk (버퍼 유지)"
+            onPress={() => {
+              flow.noteNotificationTap(Date.now());
+              router.navigate('/walk');
+            }}
+          />
           <Link href="/walk" asChild>
             <Pressable className="mt-2 rounded-lg bg-neutral-200 px-4 py-3 active:opacity-70">
               <Text className="text-center text-sm font-semibold text-neutral-600">
