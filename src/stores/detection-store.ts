@@ -1,6 +1,12 @@
 import { create } from 'zustand';
 
-import { SECURE_KEYS, secureStore, walkDetector, type WalkDetectorDiagnostics } from '@/adapters';
+import {
+  SECURE_KEYS,
+  notifications,
+  secureStore,
+  walkDetector,
+  type WalkDetectorDiagnostics,
+} from '@/adapters';
 
 /**
  * 설정 > 산책 감지. Two preferences, both of which the user can only really
@@ -52,6 +58,32 @@ export const useDetection = create<DetectionState>((set, get) => {
     set((state) => ({
       log: [`${new Date().toLocaleTimeString()}  ${line}`, ...state.log].slice(0, 40),
     }));
+  };
+
+  /**
+   * Ask iOS for the notification permission at the moment the user asks for
+   * notifications — and nowhere else.
+   *
+   * Measured 2026-08-15: the only caller of `requestPermission()` in the whole
+   * app was /debug, so a user who never opened that screen could not grant it at
+   * all. The consequences are invisible rather than loud — detection, the walk
+   * event and the candidate POST all succeed, and only
+   * `UNUserNotificationCenter.add()` is silently rejected, so nothing on screen
+   * says the feature is dead. Worse, iOS creates the app's Notifications row in
+   * the Settings app only AFTER the first request, so `기기 설정 열기` on
+   * /settings/permissions led to a page with no notification row on it.
+   *
+   * Never awaited into the toggle's own result: detection runs either way (the
+   * Core just withholds the notification), so a denial must not stop the user
+   * from turning detection on, and the prompt must not delay the switch.
+   */
+  const requestNotificationPermission = async (intent: string): Promise<void> => {
+    if (!notifications.isAvailable) return;
+    // Already-answered installs get the stored status back with no prompt, so
+    // this is safe to call on every toggle-on rather than tracking "asked yet".
+    const asked = await notifications.requestPermission();
+    if (asked.ok) append(`notification permission (${intent}): ${asked.value}`);
+    else append(`notification permission (${intent}) FAILED — ${asked.error}`);
   };
 
   return {
@@ -146,6 +178,9 @@ export const useDetection = create<DetectionState>((set, get) => {
       }
 
       append(next ? 'detection started' : 'detection stopped');
+      // After the start succeeded, so a detector that could not start does not
+      // ask for permission to send notifications it will never produce.
+      if (next) void requestNotificationPermission('자동 감지 사용');
       await get().refreshDiagnostics();
     },
 
@@ -163,6 +198,9 @@ export const useDetection = create<DetectionState>((set, get) => {
       }
 
       append(`notifications ${next ? 'on' : 'off'}`);
+      // The most literal statement of intent there is: this switch IS "send me
+      // notifications". The Core's flag alone cannot make one appear.
+      if (next) void requestNotificationPermission('기록 제안 알림');
       await get().refreshDiagnostics();
     },
   };
