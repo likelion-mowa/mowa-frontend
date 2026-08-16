@@ -8,7 +8,6 @@ import { StatusBar } from 'expo-status-bar';
 import '../../global.css';
 
 import { location, notifications, type NotificationTapData } from '@/adapters';
-import { notifications, type NotificationTapData } from '@/adapters';
 import { setApiLogHandler } from '@/api/client';
 import { useAuth } from '@/stores/auth-store';
 import { useDetection } from '@/stores/detection-store';
