@@ -89,7 +89,32 @@ type RequestOptions = {
    * a body for both endpoints; that invention is not a contract.
    */
   bodyless?: boolean;
+  /**
+   * Upper bound for this request. Defaults to DEFAULT_TIMEOUT_MS; only AI
+   * generation overrides it.
+   */
+  timeoutMs?: number;
 };
+
+/**
+ * Measured on device 2026-08-16: with the backend unreachable (public Wi-Fi
+ * isolates clients, so packets never left the phone), `fetch` never settled and
+ * the login screen span "로그인 중" forever with no way out — not an error
+ * screen, not a retry, nothing. `fetch` has no built-in timeout, so an
+ * unreachable host is indistinguishable from a slow one until the OS gives up
+ * minutes later, if ever.
+ *
+ * 15s is well past a healthy round trip (login measured 0.13s against the real
+ * backend) and short enough that a stuck user gets an actionable error.
+ */
+const DEFAULT_TIMEOUT_MS = 15_000;
+
+/**
+ * AI generation is an OpenAI round trip made by the server, so it is slow by
+ * design and must not inherit the default bound — that would abort successful
+ * generations. This is the same reality MIN_GENERATION_MS was written for.
+ */
+const AI_GENERATION_TIMEOUT_MS = 120_000;
 
 async function requestJson<T>(
   method: 'GET' | 'POST' | 'PATCH' | 'DELETE',
@@ -97,10 +122,17 @@ async function requestJson<T>(
   body?: unknown,
   options?: RequestOptions,
 ): Promise<ApiResult<T>> {
+  // Aborts the request itself, not just our wait for it, so a dead connection
+  // cannot keep a socket and a pending promise alive behind the screen.
+  const controller = new AbortController();
+  const timeoutMs = options?.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+
   let response: Response;
   try {
     response = await fetch(`${BASE_URL}${path}`, {
       method,
+      signal: controller.signal,
       // The candidate GET reads a status machine, so a stale cache hit would
       // show the wrong screen. Honest scope: this holds on web, and React
       // Native appears to ignore it — the device still issued conditional GETs
@@ -115,18 +147,36 @@ async function requestJson<T>(
       body: body === undefined ? undefined : JSON.stringify(body),
     });
   } catch (error) {
+    clearTimeout(timer);
+    // A timeout arrives here as an AbortError, which would otherwise be logged
+    // as a generic network failure and hide the fact that we gave up rather
+    // than the network refusing us. Callers still branch on `status: null`, so
+    // the two stay one case for the UI — the difference is only in the log.
+    if (controller.signal.aborted) {
+      const message = `요청이 ${timeoutMs / 1000}초 안에 끝나지 않았습니다.`;
+      console.log(`[MOWA] api ${method} ${path} timed out after ${timeoutMs}ms`);
+      return { ok: false, status: null, error: message };
+    }
     const message = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
     console.log(`[MOWA] api ${method} ${path} network error — ${message}`);
     return { ok: false, status: null, error: message };
   }
 
   // A proxy or crash page may not return JSON; that is a failure value here,
-  // never a throw.
+  // never a throw. The timer stays armed until the body is read: headers can
+  // arrive promptly and the body still stall, and that stalls the screen just
+  // the same. An abort during the read surfaces as an unparseable body, which
+  // this already treats as a failure.
   let envelope: ApiEnvelope<T> | null = null;
   try {
     envelope = (await response.json()) as ApiEnvelope<T>;
   } catch {
     envelope = null;
+  } finally {
+    // Every path past this point is synchronous, so the bound has done its job.
+    // Leaving it armed would abort nothing but would keep a timer alive per
+    // request.
+    clearTimeout(timer);
   }
 
   // Before the failure branch on purpose: a 2xx with no envelope is a success
@@ -226,7 +276,12 @@ export const api = {
     options?: { forceFail?: boolean },
   ): Promise<ApiResult<AiGenerationResponse>> {
     const suffix = options?.forceFail ? '?fail=1' : '';
-    return requestJson<AiGenerationResponse>('POST', `${endpoints.aiGeneration(draftId)}${suffix}`);
+    return requestJson<AiGenerationResponse>(
+      'POST',
+      `${endpoints.aiGeneration(draftId)}${suffix}`,
+      undefined,
+      { timeoutMs: AI_GENERATION_TIMEOUT_MS },
+    );
   },
 
   /** Finalize (기능 5). Draft must be SUCCESS; a second call for the same draft is 409. */
