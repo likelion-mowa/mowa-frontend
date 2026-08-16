@@ -8,8 +8,10 @@ import { StatusBar } from 'expo-status-bar';
 import '../../global.css';
 
 import { notifications, type NotificationTapData } from '@/adapters';
+import { setApiLogHandler } from '@/api/client';
 import { useAuth } from '@/stores/auth-store';
 import { useDetection } from '@/stores/detection-store';
+import { useDiagnostics } from '@/stores/diagnostics-store';
 import { useWalkCandidateFlow } from '@/stores/walk-candidate-store';
 
 /**
@@ -156,6 +158,10 @@ export default function RootLayout() {
   // reactCompiler is on: every hook here stays unconditional, so RootLayout
   // never returns early.
   useEffect(() => {
+    // Registered before restore() fires the first request (getMe), so no
+    // request in the app's lifetime is missed. /debug renders this log — the
+    // only way to see an HTTP exchange on a device with no reachable proxy.
+    setApiLogHandler((line) => useDiagnostics.getState().append(line));
     void restore();
   }, [restore]);
 
