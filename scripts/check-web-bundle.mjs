@@ -89,6 +89,9 @@ const MUST_BE_PRESENT = [
   ['settings 로그아웃', '로그아웃'],
   ['detection toggle', '자동 감지 사용'],
   ['login gate headline', '권한을 확인해주세요'],
+  // Unique to the login gate's 동작 및 피트니스 row — /settings/permissions has
+  // its own wording. A shared string would still pass with the new row deleted.
+  ['login gate motion row', '걷기 활동과 걸음 수로 산책을 감지해요'],
   ['settings permissions note', '권한 변경은 기기 설정 앱에서 직접 해야 해요.'],
   // Positive control for the WEB secure-store adapter, the same trick as the
   // walks storage key: it proves the localStorage half shipped rather than

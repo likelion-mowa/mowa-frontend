@@ -1,6 +1,6 @@
 import WalkDetector from '../../modules/walk-detector';
 
-import { toError, type WalkDetectorPort, type WalkEvent } from './types';
+import { toError, toPermissionState, type WalkDetectorPort, type WalkEvent } from './types';
 
 /**
  * iOS implementation.
@@ -64,6 +64,24 @@ export const walkDetector: WalkDetectorPort = {
   async queryHistory(sinceMs) {
     try {
       return { ok: true, value: await WalkDetector.queryHistory(sinceMs) };
+    } catch (error) {
+      return toError(error);
+    }
+  },
+
+  async requestMotionPermission() {
+    try {
+      // CoreMotion has no request API. `queryHistory` reaches
+      // `CMMotionActivityManager.queryActivityStarting`, and issuing that query
+      // IS what makes iOS show the Motion & Fitness dialog — the callback does
+      // not fire until the user has answered. A one-minute window is the
+      // cheapest query that still counts: the rows are thrown away, only the
+      // prompt matters.
+      await WalkDetector.queryHistory(Date.now() - 60_000);
+      // Read back rather than infer. An empty result cannot be told apart from
+      // a denial, and the Core exposes the real authorization status.
+      const diagnostics = await WalkDetector.getDiagnostics();
+      return { ok: true, value: toPermissionState(diagnostics.motionAuthorization) };
     } catch (error) {
       return toError(error);
     }

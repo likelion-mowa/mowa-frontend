@@ -7,7 +7,7 @@ import { StatusBar } from 'expo-status-bar';
 // NativeWind entry. Imported exactly once, here.
 import '../../global.css';
 
-import { location, notifications, type NotificationTapData } from '@/adapters';
+import { location, notifications, walkDetector, type NotificationTapData } from '@/adapters';
 import { setApiLogHandler } from '@/api/client';
 import { useAuth } from '@/stores/auth-store';
 import { useDetection } from '@/stores/detection-store';
@@ -242,15 +242,22 @@ export default function RootLayout() {
     }
 
     let cancelled = false;
-    void Promise.all([location.getPermission(), notifications.getPermission()]).then(
-      ([locationResult, notificationResult]) => {
-        if (cancelled) return;
-        const locationPrompt = locationResult.ok && locationResult.value.foreground === 'prompt';
-        const notificationPrompt =
-          notificationResult.ok && notificationResult.value === 'prompt';
-        setNeedsPermissions(locationPrompt || notificationPrompt);
-      },
-    );
+    void Promise.all([
+      location.getPermission(),
+      // Motion counts here too. Without it a user who granted location and
+      // notifications never reaches /permissions again, so the 동작 및 피트니스
+      // row could not be shown and the CoreMotion dialog would keep arriving
+      // unannounced from the home screen's detection toggle. getDiagnostics
+      // reads the status without prompting.
+      walkDetector.getDiagnostics(),
+      notifications.getPermission(),
+    ]).then(([locationResult, motionResult, notificationResult]) => {
+      if (cancelled) return;
+      const locationPrompt = locationResult.ok && locationResult.value.foreground === 'prompt';
+      const motionPrompt = motionResult.ok && motionResult.value.motionAuthorization === 'prompt';
+      const notificationPrompt = notificationResult.ok && notificationResult.value === 'prompt';
+      setNeedsPermissions(locationPrompt || motionPrompt || notificationPrompt);
+    });
     return () => {
       cancelled = true;
     };
