@@ -8,11 +8,8 @@ import { colors } from '@/lib/theme';
  * A walk's photo, filling its (positioned) parent, with the prototype's mint
  * placeholder when there is none.
  *
- * `photoUrl` is whatever string the server holds, and today the diary flow
- * stores a device-local `file://` URI (no object storage yet — see
- * docs/api-implementation.md). Those cannot load anywhere but the phone that
- * took them, so a load failure falls back to the placeholder instead of
- * leaving a blank tile.
+ * Persisted `photoUrl` values should be HTTPS Cloudinary URLs. A load failure
+ * still falls back to the placeholder instead of leaving a blank tile.
  */
 
 type WalkPhotoProps = {

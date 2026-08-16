@@ -25,6 +25,9 @@ export default function DiaryPhotoScreen() {
   const experienceId = useDiaryFlow((state) => state.experienceId);
   const beginFlow = useDiaryFlow((state) => state.beginFlow);
   const photoUri = useDiaryFlow((state) => state.photoUri);
+  const photoUrl = useDiaryFlow((state) => state.photoUrl);
+  const photoUploadPhase = useDiaryFlow((state) => state.photoUploadPhase);
+  const photoUploadError = useDiaryFlow((state) => state.photoUploadError);
   const setPhoto = useDiaryFlow((state) => state.setPhoto);
   const pickPhotoFromLibrary = useDiaryFlow((state) => state.pickPhotoFromLibrary);
   const capturePhotoWithCamera = useDiaryFlow((state) => state.capturePhotoWithCamera);
@@ -52,6 +55,17 @@ export default function DiaryPhotoScreen() {
     { label: '카메라', sub: '지금 촬영하기', icon: IcCamera, onPress: capturePhotoWithCamera },
     { label: '갤러리', sub: '앨범에서 선택', icon: IcGallery, onPress: pickPhotoFromLibrary },
   ];
+
+  const uploading = photoUploadPhase === 'uploading';
+  const buttonLabel = uploading
+    ? '사진 업로드 중...'
+    : photoUrl !== null
+      ? '이 사진으로 계속하기'
+      : '사진 없이 계속하기';
+  const continueToContext = () => {
+    if (photoUri !== null && photoUrl === null) setPhoto(null);
+    router.push('/diary/context');
+  };
 
   return (
     <SafeAreaView className="flex-1 bg-parchment">
@@ -84,6 +98,7 @@ export default function DiaryPhotoScreen() {
             </View>
             <Pressable
               accessibilityRole="button"
+              disabled={uploading}
               onPress={() => setPhoto(null)}
               className="absolute right-3 top-3 h-7 w-7 items-center justify-center rounded-full bg-black/50 active:opacity-70">
               <IcClose size={14} color={colors.white} />
@@ -95,8 +110,9 @@ export default function DiaryPhotoScreen() {
               <Pressable
                 key={source.label}
                 accessibilityRole="button"
+                disabled={uploading}
                 onPress={() => void source.onPress()}
-                className={`flex-1 items-center rounded-2xl border-2 border-dashed border-line bg-white py-7 active:border-sage ${index > 0 ? 'ml-3' : ''}`}>
+                className={`flex-1 items-center rounded-2xl border-2 border-dashed border-line bg-white py-7 active:border-sage ${uploading ? 'opacity-50' : ''} ${index > 0 ? 'ml-3' : ''}`}>
                 <View className="h-12 w-12 items-center justify-center rounded-full bg-sage-pale">
                   <source.icon size={22} color={colors.sage} />
                 </View>
@@ -107,9 +123,25 @@ export default function DiaryPhotoScreen() {
           </View>
         )}
 
+        {uploading ? (
+          <Text className="mb-3 text-center text-xs text-ink-muted">사진을 업로드하고 있어요.</Text>
+        ) : null}
+        {photoUploadPhase === 'success' ? (
+          <Text className="mb-3 text-center text-xs text-sage">사진 업로드가 완료됐어요.</Text>
+        ) : null}
+        {photoUploadPhase === 'error' && photoUploadError !== null ? (
+          <View className="mb-3">
+            <Text className="text-center text-xs text-red-500">
+              사진 업로드에 실패했어요. 다시 선택하거나 사진 없이 계속할 수 있어요.
+            </Text>
+            <Text className="mt-1 text-center text-[10px] text-ink-subtle">{photoUploadError}</Text>
+          </View>
+        ) : null}
+
         <PrimaryButton
-          label={photoUri !== null ? '이 사진으로 계속하기' : '사진 없이 계속하기'}
-          onPress={() => router.push('/diary/context')}
+          label={buttonLabel}
+          disabled={uploading}
+          onPress={continueToContext}
         />
       </ScrollView>
     </SafeAreaView>

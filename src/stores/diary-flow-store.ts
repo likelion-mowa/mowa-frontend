@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 
-import { photoPicker } from '@/adapters';
+import { photoPicker, type PickedPhoto } from '@/adapters';
 import { api, hasAccessToken } from '@/api/client';
 import {
   normalizeTag,
@@ -16,6 +16,7 @@ import {
   releasePhotoUri,
   validateTitleAndTags,
 } from '@/lib/experience-input';
+import { uploadPhotoToCloudinary } from '@/lib/cloudinary-upload';
 import type { ActiveCandidate } from '@/stores/walk-candidate-store';
 
 /**
@@ -46,6 +47,7 @@ export type DiaryWalkInfo = {
 
 export type GenerationPhase = 'idle' | 'working' | 'failed' | 'success';
 export type SavePhase = 'idle' | 'saving' | 'saved';
+export type PhotoUploadPhase = 'idle' | 'uploading' | 'success' | 'error';
 
 export type AiResult = {
   title: string;
@@ -57,6 +59,9 @@ type DiaryFlowState = {
   walk: DiaryWalkInfo | null;
 
   photoUri: string | null;
+  photoUrl: string | null;
+  photoUploadPhase: PhotoUploadPhase;
+  photoUploadError: string | null;
   companion: Companion | null;
   emotions: Emotion[];
   situation: Situation | null;
@@ -107,15 +112,19 @@ const MIN_GENERATION_MS = 1200;
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? `${error.name}: ${error.message}` : String(error);
+}
+
 /** Key of the inputs the server draft was last synced with. */
-function inputsKey(state: Pick<DiaryFlowState, 'photoUri' | 'companion' | 'emotions' | 'situation'>): string {
-  return JSON.stringify([state.photoUri, state.companion, [...state.emotions].sort(), state.situation]);
+function inputsKey(state: Pick<DiaryFlowState, 'photoUrl' | 'companion' | 'emotions' | 'situation'>): string {
+  return JSON.stringify([state.photoUrl, state.companion, [...state.emotions].sort(), state.situation]);
 }
 
 /** Fields the user actually set. Unset fields are omitted — the spec forbids the server inventing them. */
 function draftBody(state: DiaryFlowState): CreateExperienceDraftRequest {
   const body: CreateExperienceDraftRequest = {};
-  if (state.photoUri !== null) body.photoUrl = state.photoUri;
+  if (state.photoUrl !== null) body.photoUrl = state.photoUrl;
   if (state.companion !== null) body.companion = state.companion;
   if (state.emotions.length > 0) body.emotions = state.emotions;
   if (state.situation !== null) body.situation = state.situation;
@@ -125,6 +134,9 @@ function draftBody(state: DiaryFlowState): CreateExperienceDraftRequest {
 const initial = {
   walk: null,
   photoUri: null,
+  photoUrl: null,
+  photoUploadPhase: 'idle' as PhotoUploadPhase,
+  photoUploadError: null,
   companion: null,
   emotions: [] as Emotion[],
   situation: null,
@@ -142,6 +154,7 @@ const initial = {
 // Module scope, like walk-candidate-store's run counter: survives Fast Refresh
 // and lets a newer generate() supersede one still in flight.
 let generateRun = 0;
+let photoUploadRun = 0;
 let syncedInputsKey: string | null = null;
 
 export const useDiaryFlow = create<DiaryFlowState>((set, get) => {
@@ -152,6 +165,39 @@ export const useDiaryFlow = create<DiaryFlowState>((set, get) => {
     }));
   };
 
+  const uploadPickedPhoto = async (picked: PickedPhoto, source: 'library' | 'camera') => {
+    const previous = get().photoUri;
+    if (previous !== picked.uri) releasePhotoUri(previous);
+
+    const run = ++photoUploadRun;
+    set({
+      photoUri: picked.uri,
+      photoUrl: null,
+      photoUploadPhase: 'uploading',
+      photoUploadError: null,
+    });
+
+    try {
+      const secureUrl = await uploadPhotoToCloudinary(picked);
+      if (run !== photoUploadRun) return;
+      set({
+        photoUrl: secureUrl,
+        photoUploadPhase: 'success',
+        photoUploadError: null,
+      });
+      append(`photo ${source}: Cloudinary upload SUCCESS`);
+    } catch (error) {
+      if (run !== photoUploadRun) return;
+      const message = errorMessage(error);
+      set({
+        photoUrl: null,
+        photoUploadPhase: 'error',
+        photoUploadError: message,
+      });
+      append(`photo ${source}: Cloudinary upload FAILED ??${message}`);
+    }
+  };
+
   return {
     ...initial,
     forceAiFailure: false,
@@ -160,6 +206,7 @@ export const useDiaryFlow = create<DiaryFlowState>((set, get) => {
     beginFlow: (candidate) => {
       if (get().walk?.candidateId === candidate.candidateId) return; // remount of the same flow
       generateRun += 1;
+      photoUploadRun += 1;
       syncedInputsKey = null;
       releasePhotoUri(get().photoUri);
       set({
@@ -185,8 +232,7 @@ export const useDiaryFlow = create<DiaryFlowState>((set, get) => {
         append('photo library cancelled');
         return;
       }
-      releasePhotoUri(get().photoUri);
-      set({ photoUri: picked.value.uri });
+      await uploadPickedPhoto(picked.value, 'library');
     },
 
     capturePhotoWithCamera: async () => {
@@ -199,14 +245,19 @@ export const useDiaryFlow = create<DiaryFlowState>((set, get) => {
         append('camera cancelled');
         return;
       }
-      releasePhotoUri(get().photoUri);
-      set({ photoUri: captured.value.uri });
+      await uploadPickedPhoto(captured.value, 'camera');
     },
 
     setPhoto: (uri) => {
+      photoUploadRun += 1;
       const previous = get().photoUri;
       if (previous !== uri) releasePhotoUri(previous);
-      set({ photoUri: uri });
+      set({
+        photoUri: uri,
+        photoUrl: null,
+        photoUploadPhase: 'idle',
+        photoUploadError: null,
+      });
     },
     setCompanion: (value) => set({ companion: value }),
     setSituation: (value) => set({ situation: value }),
@@ -224,6 +275,10 @@ export const useDiaryFlow = create<DiaryFlowState>((set, get) => {
       const state = get();
       if (state.walk === null) {
         append('generate skipped — no active flow');
+        return;
+      }
+      if (state.photoUploadPhase === 'uploading') {
+        append('generate skipped — photo upload is still running');
         return;
       }
       // Coming back from preview re-mounts the loading screen; nothing to redo.
@@ -270,7 +325,7 @@ export const useDiaryFlow = create<DiaryFlowState>((set, get) => {
         // Inputs changed after a FAILED round. PATCH sends the full current
         // truth: null clears a scalar, the array replaces wholesale.
         const patch: UpdateExperienceDraftRequest = {
-          photoUrl: state.photoUri,
+          photoUrl: state.photoUrl,
           companion: state.companion,
           emotions: state.emotions,
           situation: state.situation,
@@ -355,7 +410,7 @@ export const useDiaryFlow = create<DiaryFlowState>((set, get) => {
       const body: CreateWalkExperienceRequest = { draftId: state.draftId, title };
       const trimmedBody = state.body.trim();
       if (trimmedBody.length > 0) body.body = trimmedBody;
-      if (state.photoUri !== null) body.photoUrl = state.photoUri;
+      if (state.photoUrl !== null) body.photoUrl = state.photoUrl;
       if (state.companion !== null) body.companion = state.companion;
       if (state.emotions.length > 0) body.emotions = state.emotions;
       if (state.situation !== null) body.situation = state.situation;
@@ -385,7 +440,9 @@ export const useDiaryFlow = create<DiaryFlowState>((set, get) => {
 
     reset: () => {
       generateRun += 1;
+      photoUploadRun += 1;
       syncedInputsKey = null;
+      releasePhotoUri(get().photoUri);
       set({ ...initial });
     },
   };

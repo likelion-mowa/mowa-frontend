@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Image, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -29,6 +29,7 @@ import {
   seedEditDraft,
   type ExperienceEditDraft,
 } from '@/lib/experience-input';
+import { uploadPhotoToCloudinary } from '@/lib/cloudinary-upload';
 import { formatDurationMinutes, formatKoreanDate, formatTime } from '@/lib/format';
 import { colors } from '@/lib/theme';
 
@@ -54,6 +55,10 @@ import { colors } from '@/lib/theme';
 const SECTION_LABEL = 'mb-2 text-[10px] font-semibold uppercase tracking-wider text-ink-subtle';
 const TEXT_INPUT = 'rounded-xl border border-line bg-white px-4 py-3.5 text-ink';
 
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? `${error.name}: ${error.message}` : String(error);
+}
+
 export function ExperienceEditor({
   detail,
   saving,
@@ -69,23 +74,41 @@ export function ExperienceEditor({
   onSave: (draft: ExperienceEditDraft) => void;
 }) {
   const [draft, setDraft] = useState(() => seedEditDraft(detail));
+  const [photoPreviewUri, setPhotoPreviewUri] = useState(draft.photoUrl);
+  const [photoUploadPhase, setPhotoUploadPhase] = useState<'idle' | 'uploading' | 'success' | 'error'>('idle');
   const [photoError, setPhotoError] = useState<string | null>(null);
+  const photoPreviewRef = useRef(photoPreviewUri);
+  const photoUploadRun = useRef(0);
 
-  /**
-   * Revoke only object URLs THIS editor created. `detail.photoUrl` can itself
-   * be a blob: URL — on web the diary flow saves the picked object URL as the
-   * photoUrl, since there is no object storage yet — and revoking that would
-   * blank the record the user is still looking at.
-   */
+  const setPreview = (uri: string | null) => {
+    photoPreviewRef.current = uri;
+    setPhotoPreviewUri(uri);
+  };
+
+  useEffect(
+    () => () => {
+      if (photoPreviewRef.current !== null && photoPreviewRef.current !== detail.photoUrl) {
+        releasePhotoUri(photoPreviewRef.current);
+      }
+    },
+    [detail.photoUrl],
+  );
+
+  /** `photoPreviewUri` may be a temporary local URL; `draft.photoUrl` must not be. */
   const replacePhoto = (uri: string | null) => {
-    const previous = draft.photoUrl;
+    photoUploadRun.current += 1;
+    const previous = photoPreviewRef.current;
     if (previous !== null && previous !== detail.photoUrl) releasePhotoUri(previous);
+    setPreview(uri);
     setDraft((prev) => ({ ...prev, photoUrl: uri }));
+    setPhotoUploadPhase('idle');
+    setPhotoError(null);
   };
 
   const cancel = () => {
-    if (draft.photoUrl !== null && draft.photoUrl !== detail.photoUrl) {
-      releasePhotoUri(draft.photoUrl);
+    photoUploadRun.current += 1;
+    if (photoPreviewRef.current !== null && photoPreviewRef.current !== detail.photoUrl) {
+      releasePhotoUri(photoPreviewRef.current);
     }
     onCancel();
   };
@@ -99,11 +122,37 @@ export function ExperienceEditor({
       // Never silent: a denied camera permission is the common case here.
       console.log(`[MOWA] editor photo ${source} FAILED — ${picked.error}`);
       setPhotoError(picked.error);
+      setPhotoUploadPhase('error');
       return;
     }
-    setPhotoError(null);
     if (picked.value === null) return; // cancelled, not a failure
-    replacePhoto(picked.value.uri);
+
+    const run = ++photoUploadRun.current;
+    const previous = photoPreviewRef.current;
+    if (previous !== null && previous !== detail.photoUrl) releasePhotoUri(previous);
+    setPreview(picked.value.uri);
+    setPhotoError(null);
+    setPhotoUploadPhase('uploading');
+
+    try {
+      const secureUrl = await uploadPhotoToCloudinary(picked.value);
+      if (run !== photoUploadRun.current) {
+        releasePhotoUri(picked.value.uri);
+        return;
+      }
+      releasePhotoUri(picked.value.uri);
+      setPreview(secureUrl);
+      setDraft((prev) => ({ ...prev, photoUrl: secureUrl }));
+      setPhotoUploadPhase('success');
+    } catch (error) {
+      if (run !== photoUploadRun.current) return;
+      const message = errorMessage(error);
+      releasePhotoUri(picked.value.uri);
+      setPreview(draft.photoUrl);
+      console.log(`[MOWA] editor photo ${source} upload FAILED ??${message}`);
+      setPhotoError(message);
+      setPhotoUploadPhase('error');
+    }
   };
 
   const sources = [
@@ -121,6 +170,7 @@ export function ExperienceEditor({
   ];
 
   const titleEmpty = draft.title.trim().length === 0;
+  const uploadingPhoto = photoUploadPhase === 'uploading';
 
   return (
     <SafeAreaView className="flex-1 bg-parchment">
@@ -132,11 +182,11 @@ export function ExperienceEditor({
         keyboardShouldPersistTaps="handled">
         <View className="mb-5">
           <Text className={SECTION_LABEL}>사진</Text>
-          {draft.photoUrl !== null ? (
+          {photoPreviewUri !== null ? (
             <View className="relative">
               <View className="h-56 w-full overflow-hidden rounded-2xl bg-parchment-dark">
                 <Image
-                  source={{ uri: draft.photoUrl }}
+                  source={{ uri: photoPreviewUri }}
                   className="h-full w-full"
                   resizeMode="cover"
                   accessibilityLabel="산책 사진"
@@ -145,6 +195,7 @@ export function ExperienceEditor({
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel="사진 제거"
+                disabled={uploadingPhoto}
                 onPress={() => replacePhoto(null)}
                 className="absolute right-3 top-3 h-7 w-7 items-center justify-center rounded-full bg-black/50 active:opacity-70">
                 <IcClose size={14} color={colors.white} />
@@ -156,8 +207,9 @@ export function ExperienceEditor({
                 <Pressable
                   key={source.label}
                   accessibilityRole="button"
+                  disabled={uploadingPhoto}
                   onPress={() => void attach(source.source)}
-                  className={`flex-1 items-center rounded-2xl border-2 border-dashed border-line bg-white py-7 active:border-sage ${index > 0 ? 'ml-3' : ''}`}>
+                  className={`flex-1 items-center rounded-2xl border-2 border-dashed border-line bg-white py-7 active:border-sage ${uploadingPhoto ? 'opacity-50' : ''} ${index > 0 ? 'ml-3' : ''}`}>
                   <View className="h-12 w-12 items-center justify-center rounded-full bg-sage-pale">
                     <source.icon size={22} color={colors.sage} />
                   </View>
@@ -169,6 +221,12 @@ export function ExperienceEditor({
           )}
           {photoError !== null ? (
             <Text className="mt-2 text-xs text-red-500">{photoError}</Text>
+          ) : null}
+          {uploadingPhoto ? (
+            <Text className="mt-2 text-xs text-ink-muted">사진을 업로드하고 있어요.</Text>
+          ) : null}
+          {photoUploadPhase === 'success' ? (
+            <Text className="mt-2 text-xs text-sage">사진 업로드가 완료됐어요.</Text>
           ) : null}
         </View>
 
@@ -288,8 +346,8 @@ export function ExperienceEditor({
           <View className="w-3" />
           <PrimaryButton
             className="flex-1"
-            disabled={saving || titleEmpty}
-            label={saving ? '저장 중…' : '변경사항 저장'}
+            disabled={saving || uploadingPhoto || titleEmpty}
+            label={uploadingPhoto ? '사진 업로드 중...' : saving ? '저장 중…' : '변경사항 저장'}
             onPress={() => onSave(draft)}
           />
         </View>

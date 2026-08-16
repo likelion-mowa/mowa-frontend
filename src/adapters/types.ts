@@ -215,13 +215,16 @@ export type DetectedWalk = {
 /**
  * A photo the user picked or captured for the diary flow.
  *
- * `uri` is whatever the platform hands back — an app-sandbox `file://` URI on
- * iOS, an object URL on web. Per the team decision (2026-08-14) this string is
- * sent as `photoUrl` verbatim until an Object Storage is chosen; it renders on
- * the device that picked it and nowhere else.
+ * `uri` is for local preview only: an app-sandbox `file://` URI on iOS, an
+ * object URL on web. The upload path must keep the original `File` on web and
+ * native filename/MIME hints where available, then send only the Cloudinary
+ * HTTPS `secure_url` to the backend.
  */
 export type PickedPhoto = {
   uri: string;
+  fileName?: string | null;
+  mimeType?: string | null;
+  file?: File;
 };
 
 export interface PhotoPickerPort {
