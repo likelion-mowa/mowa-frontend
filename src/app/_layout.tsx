@@ -1,4 +1,4 @@
-import { useEffect, useRef, type PropsWithChildren } from 'react';
+import { useEffect, useRef, useState, type PropsWithChildren } from 'react';
 import { Animated, Platform, StyleSheet, View } from 'react-native';
 import { router, Stack, usePathname } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
@@ -82,24 +82,37 @@ function routeNotificationTap(data: NotificationTapData): void {
  * it while signed out is what preserves it. The tap is then routed the moment
  * the user signs in, landing them on the suggestion screen instead of losing it.
  */
-function useNotificationTapRouting(signedIn: boolean): void {
+function useNotificationTapRouting(signedIn: boolean): boolean | null {
+  const [hasInitialTap, setHasInitialTap] = useState<boolean | null>(null);
+
   useEffect(() => {
     notifications.setForegroundHandler();
   }, []);
 
   useEffect(() => {
-    if (!signedIn) return;
+    if (!signedIn) {
+      setHasInitialTap(null);
+      return;
+    }
 
     void notifications.getInitialResponse().then((result) => {
       if (!result.ok) {
         console.log(`[MOWA] notif initial response FAILED — ${result.error}`);
+        setHasInitialTap(false);
         return;
       }
-      if (result.value !== null) routeNotificationTap(result.value);
+      if (result.value !== null) {
+        routeNotificationTap(result.value);
+        setHasInitialTap(true);
+        return;
+      }
+      setHasInitialTap(false);
     });
 
     return notifications.addResponseListener(routeNotificationTap);
   }, [signedIn]);
+
+  return hasInitialTap;
 }
 
 /**
@@ -174,7 +187,7 @@ export default function RootLayout() {
     if (status === 'signed-in' && onAuthRoute) router.replace('/');
   }, [status, onAuthRoute]);
 
-  useNotificationTapRouting(signedIn);
+  const hasInitialTap = useNotificationTapRouting(signedIn);
 
   // The detect → candidate flow runs app-wide but is useless without a session:
   // a detection with no token cannot become a server candidate. On web the
