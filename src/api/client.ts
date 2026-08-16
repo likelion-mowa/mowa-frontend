@@ -71,6 +71,38 @@ export function setSessionExpiredHandler(handler: (() => void) | null): void {
   sessionExpiredHandler = handler;
 }
 
+let apiLogHandler: ((line: string) => void) | null = null;
+
+/**
+ * Called on every request, success or failure, with one summary line. Same
+ * registered-not-imported shape as setSessionExpiredHandler above, and for the
+ * same reason: this file must not know about stores. The only consumer today
+ * is /debug — there is no way to see an HTTPS exchange on a physical device
+ * otherwise (no proxy reaches a phone on an AP-isolated network).
+ *
+ * Bodies are deliberately never included: they carry the auth token and the
+ * user's own diary text onto a screen that gets projected during the demo.
+ */
+export function setApiLogHandler(handler: ((line: string) => void) | null): void {
+  apiLogHandler = handler;
+}
+
+function logApiResult(
+  method: string,
+  path: string,
+  status: number | null,
+  startedAtMs: number,
+  errorDetail?: string,
+): void {
+  const outcome = status === null ? 'network' : String(status);
+  const elapsedMs = Date.now() - startedAtMs;
+  const line =
+    errorDetail === undefined
+      ? `${method} ${path} → ${outcome} (${elapsedMs}ms)`
+      : `${method} ${path} → ${outcome} (${elapsedMs}ms) — ${errorDetail}`;
+  apiLogHandler?.(line);
+}
+
 type RequestOptions = {
   /**
    * Endpoints that need no token. Only `/auth/login` today, and it matters: a
@@ -127,6 +159,7 @@ async function requestJson<T>(
   const controller = new AbortController();
   const timeoutMs = options?.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const timer = setTimeout(() => controller.abort(), timeoutMs);
+  const startedAtMs = Date.now();
 
   let response: Response;
   try {
@@ -155,10 +188,12 @@ async function requestJson<T>(
     if (controller.signal.aborted) {
       const message = `요청이 ${timeoutMs / 1000}초 안에 끝나지 않았습니다.`;
       console.log(`[MOWA] api ${method} ${path} timed out after ${timeoutMs}ms`);
+      logApiResult(method, path, null, startedAtMs, 'timeout');
       return { ok: false, status: null, error: message };
     }
     const message = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
     console.log(`[MOWA] api ${method} ${path} network error — ${message}`);
+    logApiResult(method, path, null, startedAtMs, message);
     return { ok: false, status: null, error: message };
   }
 
@@ -183,6 +218,7 @@ async function requestJson<T>(
   // here, not a parse failure. An envelope that explicitly says `success: false`
   // still falls through and is reported as one.
   if (response.ok && options?.bodyless === true && (envelope === null || envelope.success)) {
+    logApiResult(method, path, response.status, startedAtMs);
     return { ok: true, value: null as T };
   }
 
@@ -194,6 +230,7 @@ async function requestJson<T>(
           ? envelope.message
           : `${envelope.error.code}: ${envelope.error.detail}`;
     console.log(`[MOWA] api ${method} ${path} → ${response.status} — ${logDetail}`);
+    logApiResult(method, path, response.status, startedAtMs, logDetail);
 
     // Session expiry, handled in exactly one place. The spec defines no token
     // TTL and no refresh (docs/backend/api-spec.md 기능 13), so a 401 on an
@@ -217,6 +254,7 @@ async function requestJson<T>(
     };
   }
 
+  logApiResult(method, path, response.status, startedAtMs);
   return { ok: true, value: envelope.data };
 }
 

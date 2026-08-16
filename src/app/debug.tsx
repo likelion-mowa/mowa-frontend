@@ -28,6 +28,7 @@ import {
 import { kstMonthRange, kstNow, kstYearRange } from '@/lib/kst';
 import { pickLocationSummary } from '@/lib/location-summary';
 import { useAuth } from '@/stores/auth-store';
+import { useDetection } from '@/stores/detection-store';
 import { useDiagnostics } from '@/stores/diagnostics-store';
 import { useDiaryFlow } from '@/stores/diary-flow-store';
 import { useExperiences } from '@/stores/experience-store';
@@ -87,6 +88,7 @@ export default function SmokeScreen() {
   const flow = useWalkCandidateFlow();
   const diary = useDiaryFlow();
   const experiences = useExperiences();
+  const detection = useDetection();
   const [probeLines, setProbeLines] = useState<string[]>([]);
   // Local rather than in diagnostics-store: this is a one-off measurement read
   // off the screen, with no reason to outlive the mount.
@@ -653,6 +655,13 @@ export default function SmokeScreen() {
               {line}
             </Text>
           ))}
+          <View className="h-3" />
+          <Text className="mb-1 text-xs font-semibold text-neutral-500">auth log</Text>
+          {auth.log.map((line, i) => (
+            <Text key={i} className="font-mono text-xs text-neutral-700">
+              {line}
+            </Text>
+          ))}
         </Section>
 
         <Section title="7 · Diary flow (drafts + AI generation)">
@@ -729,6 +738,25 @@ export default function SmokeScreen() {
             `npm run mock:test`.
           </Text>
           {probeLines.map((line, i) => (
+            <Text key={i} className="font-mono text-xs text-neutral-700">
+              {line}
+            </Text>
+          ))}
+          <View className="h-3" />
+          <Text className="mb-1 text-xs font-semibold text-neutral-500">experience log</Text>
+          {experiences.log.map((line, i) => (
+            <Text key={i} className="font-mono text-xs text-neutral-700">
+              {line}
+            </Text>
+          ))}
+        </Section>
+
+        <Section title="9 · Detection settings (log)">
+          <Row label="phase" value={detection.phase} />
+          <Row label="enabled" value={String(detection.enabled)} />
+          <Row label="notificationsEnabled" value={String(detection.notificationsEnabled)} />
+          <Row label="error" value={detection.error ?? '—'} />
+          {detection.log.map((line, i) => (
             <Text key={i} className="font-mono text-xs text-neutral-700">
               {line}
             </Text>
