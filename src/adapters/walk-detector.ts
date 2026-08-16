@@ -42,6 +42,12 @@ export const walkDetector: WalkDetectorPort = {
     return { ok: true, value: [] };
   },
 
+  async requestMotionPermission() {
+    // Not an error: the browser has no motion-activity permission to ask for,
+    // and the caller renders '해당 없음' from this rather than a failure.
+    return { ok: true, value: 'unavailable' };
+  },
+
   async getDiagnostics() {
     return {
       ok: true,

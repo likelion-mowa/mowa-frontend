@@ -71,6 +71,17 @@ export interface WalkDetectorPort {
   /** How long to stay still before a walk counts as over (기본 180초). Applies to debounces scheduled after the call. */
   setEndDebounceSeconds(seconds: number): Promise<AdapterResult<boolean>>;
   queryHistory(sinceMs: number): Promise<AdapterResult<WalkEvent[]>>;
+  /**
+   * Shows the Motion & Fitness prompt WITHOUT starting detection, and resolves
+   * with the settled status.
+   *
+   * CoreMotion has no request API — issuing a query IS the prompt. Until this
+   * existed the only thing that ever issued one was `start()`, so the dialog
+   * appeared as a side effect of the home screen's detection toggle, with no
+   * row anywhere explaining it. `getDiagnostics().motionAuthorization` reads
+   * the status but never prompts, which is why reading is not enough here.
+   */
+  requestMotionPermission(): Promise<AdapterResult<PermissionState>>;
   getDiagnostics(): Promise<AdapterResult<WalkDetectorDiagnostics>>;
   emitTestEvent(): Promise<AdapterResult<boolean>>;
   subscribe(listener: (event: WalkEvent) => void): () => void;
@@ -299,6 +310,20 @@ export const SECURE_KEYS = {
 export interface SystemSettingsPort {
   readonly isAvailable: boolean;
   open(): Promise<AdapterResult<true>>;
+}
+
+/**
+ * Narrows a raw status string from the native bridge to `PermissionState`.
+ *
+ * Motion has no adapter of its own — the detector reports its authorization as
+ * a plain string in `WalkDetectorDiagnostics`, because the Swift enum's raw
+ * values cross the bridge unchecked and tsc cannot see them.
+ */
+export function toPermissionState(raw: string): PermissionState {
+  if (raw === 'granted' || raw === 'denied' || raw === 'prompt' || raw === 'unavailable') {
+    return raw;
+  }
+  return 'unknown';
 }
 
 /** Normalizes an unknown throwable into the AdapterResult error branch. */

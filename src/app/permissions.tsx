@@ -3,9 +3,16 @@ import { ScrollView, Pressable, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useFocusEffect } from 'expo-router';
 
-import { location, notifications, systemSettings, type PermissionState } from '@/adapters';
+import {
+  location,
+  notifications,
+  systemSettings,
+  toPermissionState,
+  walkDetector,
+  type PermissionState,
+} from '@/adapters';
 import { PrimaryButton } from '@/components/buttons';
-import { IcBell, IcLocation } from '@/components/icons';
+import { IcBell, IcLocation, IcWalk } from '@/components/icons';
 import { SettingsRow, SettingsSection } from '@/components/settings-ui';
 import { colors } from '@/lib/theme';
 
@@ -22,6 +29,14 @@ import { colors } from '@/lib/theme';
  * while a permission is `prompt`, because the iOS system prompt is shown once
  * per install — a button that fires a second request would just silently
  * return the already-decided value.
+ *
+ * The rows must cover every permission the app can prompt for, or the ones it
+ * omits still appear — just as a dialog with no explanation attached. That was
+ * measured for 동작 및 피트니스: it was absent here, so the only thing that ever
+ * issued a CoreMotion query was `walkDetector.start()`, and the dialog arrived
+ * as a side effect of the home screen's detection toggle. 카메라 is the one
+ * deliberate omission — a photo permission asked before there is a photo to
+ * take has no context to justify it, so it stays at its point of use.
  */
 
 type LocationRowState =
@@ -66,15 +81,22 @@ function RowLabel({ text, tone }: { text: string; tone: 'muted' | 'positive' | '
 
 export default function PermissionsScreen() {
   const [locationState, setLocationState] = useState<LocationRowState>({ kind: 'prompt' });
+  const [motionState, setMotionState] = useState<PermissionState>('prompt');
   const [notificationState, setNotificationState] = useState<PermissionState>('prompt');
   const [settingsError, setSettingsError] = useState<string | null>(null);
 
   const read = useCallback(async () => {
-    const [locationResult, notificationResult] = await Promise.all([
+    const [locationResult, motionResult, notificationResult] = await Promise.all([
       location.getPermission(),
+      // Reads the status; never prompts. On web this resolves to 'unavailable'
+      // through the stub, so the row renders 해당 없음 instead of a dead button.
+      walkDetector.getDiagnostics(),
       notifications.getPermission(),
     ]);
     setLocationState(describeLocation(locationResult));
+    setMotionState(
+      motionResult.ok ? toPermissionState(motionResult.value.motionAuthorization) : 'unknown',
+    );
     setNotificationState(notificationResult.ok ? notificationResult.value : 'unknown');
   }, []);
 
@@ -93,6 +115,12 @@ export default function PermissionsScreen() {
   const requestLocationBackground = () => {
     void location.requestBackgroundPermission().then((result) => {
       setLocationState(describeLocation(result));
+    });
+  };
+
+  const requestMotion = () => {
+    void walkDetector.requestMotionPermission().then((result) => {
+      setMotionState(result.ok ? result.value : 'unknown');
     });
   };
 
@@ -129,6 +157,20 @@ export default function PermissionsScreen() {
       ? '앱 사용 중만 허용됨 — 백그라운드 감지가 동작하지 않아요'
       : '걷는 장소를 기록하고, 산책이 끝난 걸 자동으로 감지해요';
 
+  // Motion is the only one of the three whose denial cannot be reversed from
+  // inside the app at all, so 거부됨 gets the same 기기 설정 열기 escape as
+  // a denied location rather than a dead label.
+  const motionRight =
+    motionState === 'prompt' ? (
+      <RowActionButton label="허용" onPress={requestMotion} />
+    ) : motionState === 'granted' ? (
+      <RowLabel text="허용됨" tone="positive" />
+    ) : motionState === 'denied' ? (
+      <RowActionButton label="기기 설정 열기" onPress={openSettings} />
+    ) : (
+      <RowLabel text="해당 없음" tone="muted" />
+    );
+
   const notificationRight =
     notificationState === 'prompt' ? (
       <RowActionButton label="허용" onPress={requestNotifications} />
@@ -158,6 +200,14 @@ export default function PermissionsScreen() {
             subtitle={locationSubtitle}
             divider
             right={locationRight}
+          />
+          <SettingsRow
+            icon={<IcWalk size={18} color={colors.sageDark} />}
+            tileClassName="bg-sage-pale"
+            title="동작 및 피트니스"
+            subtitle="걷기 활동과 걸음 수로 산책을 감지해요"
+            divider
+            right={motionRight}
           />
           <SettingsRow
             icon={<IcBell size={18} color={colors.inkMid} />}

@@ -8,6 +8,7 @@ import {
   notifications,
   photoPicker,
   systemSettings,
+  toPermissionState,
   walkDetector,
   type PermissionState,
 } from '@/adapters';
@@ -54,14 +55,6 @@ function stateLabel(state: PermissionState): { text: string; className: string }
     default:
       return { text: '확인 불가', className: 'text-ink-subtle' };
   }
-}
-
-/** Motion has no adapter of its own; the detector reports it. */
-function toPermissionState(raw: string): PermissionState {
-  if (raw === 'granted' || raw === 'denied' || raw === 'prompt' || raw === 'unavailable') {
-    return raw;
-  }
-  return 'unknown';
 }
 
 export default function PermissionsScreen() {
