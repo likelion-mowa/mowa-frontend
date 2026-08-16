@@ -52,10 +52,9 @@ export function validateTitleAndTags(title: string, tags: readonly string[]): st
  * Web object URLs (blob:) hold their image in memory until revoked; iOS file
  * URIs need no release. Called whenever a photo is replaced or a flow resets.
  *
- * Callers must be sure the URI is theirs to revoke. A SAVED experience's
- * `photoUrl` can itself be a blob: URL on web — the diary flow stores the
- * picked object URL as the photoUrl, since there is no object storage yet —
- * and revoking that would blank a record the user is still looking at.
+ * Callers must be sure the URI is theirs to revoke. Persisted `photoUrl`
+ * values must be HTTPS Cloudinary URLs; only in-progress web previews should
+ * ever be `blob:` URLs.
  */
 export function releasePhotoUri(uri: string | null): void {
   if (

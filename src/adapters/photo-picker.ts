@@ -10,8 +10,9 @@ import { toError, type AdapterResult, type PhotoPickerPort, type PickedPhoto } f
  * bundle entirely — its specifier must not appear here even in prose, since
  * Gate 4 greps the bundle for it.
  *
- * The returned URI is an object URL, alive for this page session only — which
- * matches how far a photo can travel on web anyway (no Object Storage yet).
+ * The returned URI is an object URL for preview only. The real `File` stays on
+ * the picked value so upload code can send multipart data instead of sending
+ * the temporary blob URL to the backend.
  */
 function pickViaInput(capture: boolean): Promise<AdapterResult<PickedPhoto | null>> {
   return new Promise((resolve) => {
@@ -34,7 +35,18 @@ function pickViaInput(capture: boolean): Promise<AdapterResult<PickedPhoto | nul
 
       input.onchange = () => {
         const file = input.files?.[0] ?? null;
-        settle({ ok: true, value: file === null ? null : { uri: URL.createObjectURL(file) } });
+        settle({
+          ok: true,
+          value:
+            file === null
+              ? null
+              : {
+                  uri: URL.createObjectURL(file),
+                  fileName: file.name,
+                  mimeType: file.type,
+                  file,
+                },
+        });
       };
       // Fired by modern browsers when the dialog is dismissed. Older ones fire
       // nothing on cancel; the promise then stays pending, which is harmless

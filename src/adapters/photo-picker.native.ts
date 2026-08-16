@@ -15,7 +15,14 @@ function toResult(picked: ImagePicker.ImagePickerResult): AdapterResult<PickedPh
   if (picked.canceled) return { ok: true, value: null };
   const asset = picked.assets?.[0];
   if (asset === undefined) return { ok: false, error: 'Picker returned no asset.' };
-  return { ok: true, value: { uri: asset.uri } };
+  return {
+    ok: true,
+    value: {
+      uri: asset.uri,
+      fileName: asset.fileName,
+      mimeType: asset.mimeType,
+    },
+  };
 }
 
 const OPTIONS: ImagePicker.ImagePickerOptions = {
