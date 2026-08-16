@@ -60,9 +60,12 @@ public class WalkDetectorModule: Module {
         // the notification payload; JS routes the tap to it (_layout.tsx).
         WalkDetectorCore.shared.enable(
           mechanism: selected,
-          thresholdSteps: 30,
-          cooldownSeconds: 300,
-          endDebounceSeconds: 180,
+          // All three are the user's stored preferences, not literals —
+          // start()/enable() must never reset them back to defaults (each
+          // getter falls back to its measured default if unset).
+          thresholdSteps: WalkDetectorCore.shared.thresholdSteps,
+          cooldownSeconds: WalkDetectorCore.shared.cooldownSeconds,
+          endDebounceSeconds: WalkDetectorCore.shared.endDebounceSeconds,
           deepLinkPath: "/walk"
         ) { result in
           switch result {
@@ -163,6 +166,30 @@ public class WalkDetectorModule: Module {
     // A new single-argument function cannot break the existing call.
     AsyncFunction("setNotificationsEnabled") { (enabled: Bool) -> Bool in
       WalkDetectorCore.shared.notificationsEnabled = enabled
+      return true
+    }
+
+    // Separate from `start` for the same reason as setNotificationsEnabled:
+    // widening an existing AsyncFunction's arity changes argument marshalling,
+    // which no gate in this repo verifies. Applies to the next pedometer
+    // callback with no restart — thresholdSteps is read live, not cached.
+    AsyncFunction("setThresholdSteps") { (steps: Int) -> Bool in
+      WalkDetectorCore.shared.thresholdSteps = steps
+      return true
+    }
+
+    // Minimum gap between two walk notifications. Applies to the next
+    // passesCooldown() check, no restart needed.
+    AsyncFunction("setCooldownSeconds") { (seconds: Double) -> Bool in
+      WalkDetectorCore.shared.cooldownSeconds = seconds
+      return true
+    }
+
+    // How long the user must stay still before a walk counts as over. Only
+    // affects debounce windows scheduled AFTER this call — one already
+    // in-flight (scheduleEndDebounce already fired) keeps its old delay.
+    AsyncFunction("setEndDebounceSeconds") { (seconds: Double) -> Bool in
+      WalkDetectorCore.shared.endDebounceSeconds = seconds
       return true
     }
 

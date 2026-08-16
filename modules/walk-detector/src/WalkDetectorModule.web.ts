@@ -28,6 +28,18 @@ class WalkDetectorModule extends NativeModule<WalkDetectorModuleEvents> {
     return false;
   }
 
+  async setThresholdSteps(_steps: number): Promise<boolean> {
+    return false;
+  }
+
+  async setCooldownSeconds(_seconds: number): Promise<boolean> {
+    return false;
+  }
+
+  async setEndDebounceSeconds(_seconds: number): Promise<boolean> {
+    return false;
+  }
+
   async queryHistory(_sinceMs: number): Promise<WalkEvent[]> {
     return [];
   }

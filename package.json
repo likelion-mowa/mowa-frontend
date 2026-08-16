@@ -26,6 +26,7 @@
   },
   "dependencies": {
     "@kingstinct/react-native-healthkit": "^14.0.2",
+    "@react-native-community/slider": "5.2.0",
     "expo": "~57.0.12",
     "expo-blur": "~57.0.2",
     "expo-constants": "~57.0.10",

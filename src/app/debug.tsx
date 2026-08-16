@@ -419,6 +419,25 @@ export default function SmokeScreen() {
             label="last pedometer callback"
             value={agoLabel(state.diagnostics?.lastPedometerAtMs ?? null)}
           />
+          {/*
+            The only place all three user-set detection criteria are shown
+            outside 설정 > 자동 감지 설정 — needed to verify a change actually
+            crossed the bridge and survived enable()/start() rather than
+            getting reset to its default (WalkDetectorModule.swift's literals
+            were the trap for all three, fixed together).
+          */}
+          <Row
+            label="thresholdSteps"
+            value={state.diagnostics ? `${state.diagnostics.thresholdSteps}보` : '—'}
+          />
+          <Row
+            label="cooldownSeconds"
+            value={state.diagnostics ? `${state.diagnostics.cooldownSeconds}초` : '—'}
+          />
+          <Row
+            label="endDebounceSeconds"
+            value={state.diagnostics ? `${state.diagnostics.endDebounceSeconds}초` : '—'}
+          />
           <Row
             label="walk session"
             value={

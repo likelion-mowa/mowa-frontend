@@ -24,6 +24,17 @@ declare class WalkDetectorModule extends NativeModule<WalkDetectorModuleEvents> 
    * gate here verifies — stays untouched.
    */
   setNotificationsEnabled(enabled: boolean): Promise<boolean>;
+  /**
+   * Sets the step bar a walk must pass to qualify. Applies to the next
+   * pedometer callback — thresholdSteps is read live from UserDefaults, so no
+   * restart is needed. Separate from `start` for the same arity reason as
+   * `setNotificationsEnabled`.
+   */
+  setThresholdSteps(steps: number): Promise<boolean>;
+  /** Minimum gap between two walk notifications. Applies to the next check, no restart. */
+  setCooldownSeconds(seconds: number): Promise<boolean>;
+  /** How long to stay still before a walk counts as over. Applies to debounces scheduled after the call. */
+  setEndDebounceSeconds(seconds: number): Promise<boolean>;
   queryHistory(sinceMs: number): Promise<WalkEvent[]>;
   getDiagnostics(): Promise<WalkDetectorDiagnostics>;
   /** Fires one synthetic `onWalkDetected`, to verify event wiring before F1 exists. */
