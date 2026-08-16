@@ -1,4 +1,4 @@
-import { useEffect, useRef, type PropsWithChildren } from 'react';
+import { useEffect, useRef, useState, type PropsWithChildren } from 'react';
 import { Animated, Platform, StyleSheet, View } from 'react-native';
 import { router, Stack, usePathname } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
@@ -7,6 +7,7 @@ import { StatusBar } from 'expo-status-bar';
 // NativeWind entry. Imported exactly once, here.
 import '../../global.css';
 
+import { location, notifications, type NotificationTapData } from '@/adapters';
 import { notifications, type NotificationTapData } from '@/adapters';
 import { setApiLogHandler } from '@/api/client';
 import { useAuth } from '@/stores/auth-store';
@@ -84,24 +85,37 @@ function routeNotificationTap(data: NotificationTapData): void {
  * it while signed out is what preserves it. The tap is then routed the moment
  * the user signs in, landing them on the suggestion screen instead of losing it.
  */
-function useNotificationTapRouting(signedIn: boolean): void {
+function useNotificationTapRouting(signedIn: boolean): boolean | null {
+  const [hasInitialTap, setHasInitialTap] = useState<boolean | null>(null);
+
   useEffect(() => {
     notifications.setForegroundHandler();
   }, []);
 
   useEffect(() => {
-    if (!signedIn) return;
+    if (!signedIn) {
+      setHasInitialTap(null);
+      return;
+    }
 
     void notifications.getInitialResponse().then((result) => {
       if (!result.ok) {
         console.log(`[MOWA] notif initial response FAILED — ${result.error}`);
+        setHasInitialTap(false);
         return;
       }
-      if (result.value !== null) routeNotificationTap(result.value);
+      if (result.value !== null) {
+        routeNotificationTap(result.value);
+        setHasInitialTap(true);
+        return;
+      }
+      setHasInitialTap(false);
     });
 
     return notifications.addResponseListener(routeNotificationTap);
   }, [signedIn]);
+
+  return hasInitialTap;
 }
 
 /**
@@ -155,6 +169,9 @@ export default function RootLayout() {
   const onAuthRoute = AUTH_ROUTES.has(pathname);
   const signedIn = status === 'signed-in';
 
+  const [needsPermissions, setNeedsPermissions] = useState<boolean | null>(null);
+  const visitedPermissionsRef = useRef(false);
+
   // reactCompiler is on: every hook here stays unconditional, so RootLayout
   // never returns early.
   useEffect(() => {
@@ -169,6 +186,12 @@ export default function RootLayout() {
     if (status !== 'restoring') void SplashScreen.hideAsync();
   }, [status]);
 
+  // Tracks whether /permissions has been visited this session — see
+  // visitedPermissionsRef below the gate effect for what this guards against.
+  useEffect(() => {
+    if (pathname === '/permissions') visitedPermissionsRef.current = true;
+  }, [pathname]);
+
   // The gate. Imperative rather than <Redirect>, which needs a focused route
   // and cannot run from a layout; the navigator stays mounted throughout.
   useEffect(() => {
@@ -177,10 +200,62 @@ export default function RootLayout() {
       router.replace('/onboarding');
       return;
     }
-    if (status === 'signed-in' && onAuthRoute) router.replace('/');
-  }, [status, onAuthRoute]);
+    if (status === 'signed-in' && onAuthRoute) {
+      router.replace('/');
+      return;
+    }
+    // Fourth branch: a signed-in user with an undetermined location or
+    // notification permission and no cold-start notification tap in flight
+    // (`hasInitialTap`, checked upstream via `needsPermissions`) gets routed
+    // through /permissions once per app session. `visitedPermissionsRef`
+    // stops this from firing again the moment "시작하기" replaces back to
+    // home — see the effect below for why there is deliberately no stored
+    // key making this permanent across restarts.
+    if (
+      status === 'signed-in' &&
+      needsPermissions === true &&
+      !visitedPermissionsRef.current &&
+      pathname !== '/permissions'
+    ) {
+      router.replace('/permissions');
+    }
+  }, [status, onAuthRoute, needsPermissions, pathname]);
 
-  useNotificationTapRouting(signedIn);
+  const hasInitialTap = useNotificationTapRouting(signedIn);
+
+  // The visitedPermissionsRef guard: pressing "시작하기" (skip) on /permissions
+  // calls router.replace('/'), which lands back on a route where, without this
+  // guard, needsPermissions would still read true and the gate effect above
+  // would immediately replace back into /permissions — an infinite loop. The
+  // ref intentionally does NOT persist across app restarts (no SecureStorePort
+  // write); OS permission state itself is the memory, so "skip → shown again
+  // next launch" is the naturally emerging behavior.
+  useEffect(() => {
+    if (!signedIn) {
+      setNeedsPermissions(null);
+      visitedPermissionsRef.current = false;
+      return;
+    }
+    if (hasInitialTap === null) return;
+    if (hasInitialTap) {
+      setNeedsPermissions(false);
+      return;
+    }
+
+    let cancelled = false;
+    void Promise.all([location.getPermission(), notifications.getPermission()]).then(
+      ([locationResult, notificationResult]) => {
+        if (cancelled) return;
+        const locationPrompt = locationResult.ok && locationResult.value.foreground === 'prompt';
+        const notificationPrompt =
+          notificationResult.ok && notificationResult.value === 'prompt';
+        setNeedsPermissions(locationPrompt || notificationPrompt);
+      },
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [signedIn, hasInitialTap]);
 
   // The detect → candidate flow runs app-wide but is useless without a session:
   // a detection with no token cannot become a server candidate. On web the
@@ -230,7 +305,13 @@ export default function RootLayout() {
         iOS it backs up the splash, and on web it is the only defence, since
         expo-splash-screen's web build is a no-op.
       */}
-      {status === 'restoring' || (status === 'signed-out' && !onAuthRoute) ? (
+      {status === 'restoring' ||
+      (status === 'signed-out' && !onAuthRoute) ||
+      (status === 'signed-in' && needsPermissions === null) ||
+      (status === 'signed-in' &&
+        needsPermissions === true &&
+        !visitedPermissionsRef.current &&
+        pathname !== '/permissions') ? (
         <View style={StyleSheet.absoluteFill} className="bg-parchment" pointerEvents="none" />
       ) : null}
     </>
