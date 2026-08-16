@@ -120,17 +120,35 @@ final class WalkDetectorCore: NSObject {
     private var loggedFirstActivityCallback = false
     private var loggedFirstPedometerCallback = false
 
-    private var thresholdSteps: Int {
-        let stored = UserDefaults.standard.integer(forKey: Keys.threshold)
-        return stored > 0 ? stored : 30
+    var thresholdSteps: Int {
+        get {
+            let stored = UserDefaults.standard.integer(forKey: Keys.threshold)
+            return stored > 0 ? stored : 30
+        }
+        set {
+            UserDefaults.standard.set(newValue, forKey: Keys.threshold)
+            Self.log.notice("threshold_steps=\(newValue)")
+        }
     }
-    private var cooldownSeconds: TimeInterval {
-        let stored = UserDefaults.standard.double(forKey: Keys.cooldown)
-        return stored > 0 ? stored : 300
+    var cooldownSeconds: TimeInterval {
+        get {
+            let stored = UserDefaults.standard.double(forKey: Keys.cooldown)
+            return stored > 0 ? stored : 300
+        }
+        set {
+            UserDefaults.standard.set(newValue, forKey: Keys.cooldown)
+            Self.log.notice("cooldown_seconds=\(newValue)")
+        }
     }
-    private var endDebounceSeconds: TimeInterval {
-        let stored = UserDefaults.standard.double(forKey: Keys.endDebounce)
-        return stored > 0 ? stored : 180
+    var endDebounceSeconds: TimeInterval {
+        get {
+            let stored = UserDefaults.standard.double(forKey: Keys.endDebounce)
+            return stored > 0 ? stored : 180
+        }
+        set {
+            UserDefaults.standard.set(newValue, forKey: Keys.endDebounce)
+            Self.log.notice("end_debounce_seconds=\(newValue)")
+        }
     }
     private var deepLinkPath: String {
         UserDefaults.standard.string(forKey: Keys.deepLinkPath) ?? "/walk"

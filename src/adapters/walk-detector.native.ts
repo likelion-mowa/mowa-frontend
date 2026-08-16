@@ -37,6 +37,30 @@ export const walkDetector: WalkDetectorPort = {
     }
   },
 
+  async setThresholdSteps(steps) {
+    try {
+      return { ok: true, value: await WalkDetector.setThresholdSteps(steps) };
+    } catch (error) {
+      return toError(error);
+    }
+  },
+
+  async setCooldownSeconds(seconds) {
+    try {
+      return { ok: true, value: await WalkDetector.setCooldownSeconds(seconds) };
+    } catch (error) {
+      return toError(error);
+    }
+  },
+
+  async setEndDebounceSeconds(seconds) {
+    try {
+      return { ok: true, value: await WalkDetector.setEndDebounceSeconds(seconds) };
+    } catch (error) {
+      return toError(error);
+    }
+  },
+
   async queryHistory(sinceMs) {
     try {
       return { ok: true, value: await WalkDetector.queryHistory(sinceMs) };

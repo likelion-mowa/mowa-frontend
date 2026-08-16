@@ -44,6 +44,17 @@ type DetectionState = {
   refreshDiagnostics(): Promise<void>;
   setEnabled(next: boolean): Promise<void>;
   setNotificationsEnabled(next: boolean): Promise<void>;
+  /**
+   * The step bar a walk must pass to qualify. Unlike `enabled` /
+   * `notificationsEnabled` this has NO SecureStore mirror — UserDefaults is
+   * the only source of truth (see WalkDetectorPort.setThresholdSteps), so the
+   * optimistic update lands directly on `diagnostics.thresholdSteps` and
+   * `refreshDiagnostics()` is what confirms it actually stuck.
+   */
+  setThresholdSteps(next: number): Promise<void>;
+  /** Same no-SecureStore-mirror shape as `setThresholdSteps` — see there. */
+  setCooldownSeconds(next: number): Promise<void>;
+  setEndDebounceSeconds(next: number): Promise<void>;
 };
 
 async function readFlag(key: string): Promise<boolean | null> {
@@ -201,6 +212,54 @@ export const useDetection = create<DetectionState>((set, get) => {
       // The most literal statement of intent there is: this switch IS "send me
       // notifications". The Core's flag alone cannot make one appear.
       if (next) void requestNotificationPermission('기록 제안 알림');
+      await get().refreshDiagnostics();
+    },
+
+    setThresholdSteps: async (next) => {
+      const previous = get().diagnostics;
+      // Optimistic: the slider must move under the finger. There is no
+      // top-level mirror field for this one — diagnostics IS the value, so
+      // patch it directly rather than introducing a second copy.
+      if (previous !== null) set({ diagnostics: { ...previous, thresholdSteps: next }, error: null });
+
+      const result = await walkDetector.setThresholdSteps(next);
+      if (!result.ok) {
+        append(`setThresholdSteps FAILED — ${result.error}`);
+        set({ diagnostics: previous, error: result.error });
+        return;
+      }
+
+      append(`threshold steps -> ${next}`);
+      await get().refreshDiagnostics();
+    },
+
+    setCooldownSeconds: async (next) => {
+      const previous = get().diagnostics;
+      if (previous !== null) set({ diagnostics: { ...previous, cooldownSeconds: next }, error: null });
+
+      const result = await walkDetector.setCooldownSeconds(next);
+      if (!result.ok) {
+        append(`setCooldownSeconds FAILED — ${result.error}`);
+        set({ diagnostics: previous, error: result.error });
+        return;
+      }
+
+      append(`cooldown seconds -> ${next}`);
+      await get().refreshDiagnostics();
+    },
+
+    setEndDebounceSeconds: async (next) => {
+      const previous = get().diagnostics;
+      if (previous !== null) set({ diagnostics: { ...previous, endDebounceSeconds: next }, error: null });
+
+      const result = await walkDetector.setEndDebounceSeconds(next);
+      if (!result.ok) {
+        append(`setEndDebounceSeconds FAILED — ${result.error}`);
+        set({ diagnostics: previous, error: result.error });
+        return;
+      }
+
+      append(`end debounce seconds -> ${next}`);
       await get().refreshDiagnostics();
     },
   };
