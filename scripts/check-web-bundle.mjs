@@ -25,6 +25,11 @@ const MUST_BE_ABSENT = [
   // Only photo-picker.native.ts may import this; the web adapter is a DOM
   // file input precisely so this specifier never reaches the web graph.
   'expo-image-picker',
+  // Same file, second import: iOS turns the picked file:// path into a Blob
+  // with expo-file-system, because expo/fetch cannot serialize React Native's
+  // { uri, name, type } form part. Web already has a real DOM File and needs
+  // none of it.
+  'expo-file-system',
   // Only secure-store.native.ts may import this. The web adapter is
   // localStorage and never names the package, not even in prose.
   'expo-secure-store',
@@ -97,6 +102,10 @@ const MUST_BE_PRESENT = [
   // walks storage key: it proves the localStorage half shipped rather than
   // the whole module being split away.
   ['secure store key', 'mowa.auth.token.v1'],
+  // Pairs with 'expo-image-picker' and 'expo-file-system' above. Both are
+  // absent from a bundle that dropped photo picking entirely, so their absence
+  // alone proves nothing; this string exists only in photo-picker.ts.
+  ['web photo picker', 'No DOM available for a file input.'],
 ];
 
 let bundles;

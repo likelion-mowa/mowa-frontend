@@ -1,3 +1,4 @@
+import { File as FileSystemFile } from 'expo-file-system';
 import * as ImagePicker from 'expo-image-picker';
 
 import { toError, type AdapterResult, type PhotoPickerPort, type PickedPhoto } from './types';
@@ -21,6 +22,15 @@ function toResult(picked: ImagePicker.ImagePickerResult): AdapterResult<PickedPh
       uri: asset.uri,
       fileName: asset.fileName,
       mimeType: asset.mimeType,
+      // The upload needs readable bytes, not a path. expo/fetch — the global
+      // fetch on device in SDK 57 — serializes the multipart body in JS and
+      // rejects React Native's `{ uri, name, type }` part outright, so the
+      // picker is what owns turning the sandbox path into a Blob. Constructing
+      // this is cheap: it only joins and validates the path, and reads nothing
+      // until the upload calls bytes(). ImagePicker copies the asset into the
+      // app cache and always hands back a file:// URI, so this never points at
+      // a photo library ph:// asset the app cannot open.
+      file: new FileSystemFile(asset.uri),
     },
   };
 }

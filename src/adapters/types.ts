@@ -239,15 +239,24 @@ export type DetectedWalk = {
  * A photo the user picked or captured for the diary flow.
  *
  * `uri` is for local preview only: an app-sandbox `file://` URI on iOS, an
- * object URL on web. The upload path must keep the original `File` on web and
- * native filename/MIME hints where available, then send only the Cloudinary
- * HTTPS `secure_url` to the backend.
+ * object URL on web. The upload path must send `file`, then send only the
+ * Cloudinary HTTPS `secure_url` to the backend.
  */
 export type PickedPhoto = {
   uri: string;
   fileName?: string | null;
   mimeType?: string | null;
-  file?: File;
+  /**
+   * The readable bytes, as a Blob-compatible handle. BOTH platforms must set
+   * it: uploading is a `fetch` with a `FormData` body, and in SDK 57 the global
+   * `fetch` on device is expo/fetch, which builds the multipart body in JS and
+   * accepts only a string, a Blob, or an object exposing `bytes()`. React
+   * Native's `{ uri, name, type }` file part is none of those — it throws
+   * "Unsupported FormDataPart implementation" before a request is ever made.
+   * Web supplies the DOM File; iOS supplies an expo-file-system File, which
+   * declares `implements Blob`.
+   */
+  file?: Blob;
 };
 
 export interface PhotoPickerPort {

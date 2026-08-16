@@ -1,17 +1,5 @@
 import type { PickedPhoto } from '@/adapters/types';
 
-type ReactNativeFilePart = {
-  uri: string;
-  name: string;
-  type: string;
-};
-
-type UploadFormData = FormData & {
-  append(name: string, value: string): void;
-  append(name: string, value: Blob, fileName?: string): void;
-  append(name: string, value: ReactNativeFilePart): void;
-};
-
 type CloudinaryUploadResponse = {
   secure_url?: unknown;
   error?: {
@@ -67,7 +55,18 @@ export function isLocalPreviewUrl(value: string | null): value is string {
   return typeof value === 'string' && (value.startsWith('file://') || value.startsWith('blob:'));
 }
 
-function appendPhotoFile(formData: UploadFormData, source: PickedPhoto | string): void {
+/**
+ * Every branch here appends a string or a Blob, and that is not a style choice.
+ * On device the global `fetch` is expo/fetch, which builds the multipart body
+ * in JavaScript and accepts only those two (plus anything exposing `bytes()`,
+ * which is how expo-file-system's File qualifies). React Native's
+ * `{ uri, name, type }` file part throws "Unsupported FormDataPart
+ * implementation" before the request leaves the device, so it must never
+ * reappear here — and it cannot fall back to React Native's own serializer
+ * either, because expo patches `FormData.prototype.entries` into existence and
+ * that is exactly what expo/fetch checks before using `getParts()`.
+ */
+function appendPhotoFile(formData: FormData, source: PickedPhoto | string): void {
   if (typeof source === 'string') {
     if (!isHttpsUrl(source)) {
       throw new Error('Only HTTPS image URLs can be uploaded by URL.');
@@ -77,7 +76,7 @@ function appendPhotoFile(formData: UploadFormData, source: PickedPhoto | string)
   }
 
   if (source.file !== undefined) {
-    formData.append('file', source.file, source.file.name);
+    formData.append('file', source.file, cleanFileName(source.fileName, source.mimeType));
     return;
   }
 
@@ -86,16 +85,15 @@ function appendPhotoFile(formData: UploadFormData, source: PickedPhoto | string)
     return;
   }
 
-  formData.append('file', {
-    uri: source.uri,
-    name: cleanFileName(source.fileName, source.mimeType),
-    type: source.mimeType ?? 'image/jpeg',
-  });
+  // A local URI with no bytes attached. Both pickers set `file`, so reaching
+  // this means the picker changed — fail loudly rather than posting a path
+  // string Cloudinary would reject as a malformed remote URL.
+  throw new Error(`The picked photo has no readable file attached (${source.uri}).`);
 }
 
 export async function uploadPhotoToCloudinary(source: PickedPhoto | string): Promise<string> {
   const { cloudName, uploadPreset } = requireConfig();
-  const formData = new FormData() as UploadFormData;
+  const formData = new FormData();
   appendPhotoFile(formData, source);
   formData.append('upload_preset', uploadPreset);
 
