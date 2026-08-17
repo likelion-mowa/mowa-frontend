@@ -1,0 +1,54 @@
+Mowa - App Review Notes
+
+1. ABOUT THE APP
+Mowa detects a walk in the background and turns it into an AI-written diary entry.
+The user interface is Korean only.
+
+2. DEMO ACCOUNT
+Sign-in is required. This beta build has no sign-up: accounts are issued by the
+operator. Please use the demo account provided in the review information fields.
+
+3. HOW TO REVIEW WITHOUT WALKING OUTSIDE
+The main flow normally begins when the device detects real walking, which is hard
+to reproduce indoors. The build includes a developer diagnostics screen that
+simulates a completed walk from start to finish:
+
+Step 1. Sign in with the demo account.
+Step 2. A permission screen appears. You may allow or skip every permission.
+        The simulated flow below works either way.
+Step 3. Open the Settings tab, scroll to the bottom, and tap the last item,
+        "개발자 진단 열기" (Open developer diagnostics).
+Step 4. Scroll down to the section titled "6 · Candidate flow" and tap the button
+        "Synthetic FINISHED walk (20 min, with end)".
+Step 5. Return to the Home tab. A walk card is now waiting there. Tap it to open
+        the recording flow, choose a companion, one or more emotions, and a
+        situation, then tap the button that generates the diary with AI.
+Step 6. Save the generated diary. It can then be viewed, edited and deleted from
+        the Archive tab.
+
+4. WHY THE APP REQUESTS ALWAYS LOCATION AND USES BACKGROUND MODES
+Walk detection is the core feature and has to keep running while the app is not in
+the foreground. Without it, a walk is recorded only if the user happens to open the
+app while walking, which defeats the purpose of the product. Location is used for
+two things: keeping the detector alive in the background, and turning the walk's
+coordinates into a neighbourhood name such as 망원동 (Mangwon-dong). The raw
+coordinates never leave the device. Only the neighbourhood name is sent to our
+server. The app does not track users and contains no advertising or analytics SDKs.
+
+5. WHY THE APP REQUESTS HEALTHKIT
+The app reads step count and walking distance to corroborate walk detection and to
+display step totals to the user. Access is read-only. The app never writes to
+HealthKit, never sends health data to any server, and never uses health data for
+advertising or marketing.
+
+6. NOTIFICATIONS
+All notifications are local. The app has no remote push and no aps-environment
+entitlement.
+
+7. LINKS
+Privacy policy: https://walk-diary-frontend.vercel.app/privacy
+End user license agreement: https://walk-diary-frontend.vercel.app/terms
+
+8. CONTACT
+If anything is unclear or the demo account does not work, please contact us at
+cby9017@gmail.com and we will respond the same day.
