@@ -1,0 +1,164 @@
+/*
+ * Shared styling for the static legal pages (/privacy, /terms).
+ *
+ * These live in `public/` rather than `src/app/` on purpose: the auth gate in
+ * src/app/_layout.tsx redirects signed-out visitors to /onboarding, and both
+ * pages must open for App Review and for testers who are not signed in.
+ * `expo export -p web` copies public/ to the root of dist/.
+ */
+:root {
+  color-scheme: light dark;
+  --bg: #fdfcf9;
+  --card: #ffffff;
+  --ink: #1d1f1c;
+  --ink-mid: #4a4f49;
+  --ink-subtle: #7a807a;
+  --line: #e6e3db;
+  --accent: #3f8f5a;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #141614;
+    --card: #1c1f1c;
+    --ink: #f1f0ea;
+    --ink-mid: #c6c9c2;
+    --ink-subtle: #8f948d;
+    --line: #2c302c;
+    --accent: #7cc194;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  padding: 32px 16px 72px;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: -apple-system, BlinkMacSystemFont, 'Apple SD Gothic Neo', 'Pretendard', 'Noto Sans KR',
+    'Segoe UI', sans-serif;
+  line-height: 1.75;
+  font-size: 16px;
+  word-break: keep-all;
+}
+
+main {
+  max-width: 760px;
+  margin: 0 auto;
+}
+
+header {
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 20px;
+  margin-bottom: 28px;
+}
+
+h1 {
+  font-size: 1.6rem;
+  margin: 0 0 8px;
+  letter-spacing: -0.02em;
+}
+
+h2 {
+  font-size: 1.1rem;
+  margin: 40px 0 12px;
+  padding-top: 4px;
+  letter-spacing: -0.01em;
+}
+
+h3 {
+  font-size: 0.98rem;
+  margin: 24px 0 8px;
+  color: var(--ink-mid);
+}
+
+p,
+li {
+  color: var(--ink-mid);
+}
+
+strong {
+  color: var(--ink);
+}
+
+.meta {
+  color: var(--ink-subtle);
+  font-size: 0.88rem;
+  line-height: 1.6;
+  margin: 0;
+}
+
+.lead {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 16px 18px;
+  margin: 0 0 8px;
+}
+
+.scroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  margin: 12px 0;
+}
+
+table {
+  border-collapse: collapse;
+  width: 100%;
+  min-width: 560px;
+  font-size: 0.92rem;
+}
+
+th,
+td {
+  border: 1px solid var(--line);
+  padding: 10px 12px;
+  text-align: left;
+  vertical-align: top;
+  color: var(--ink-mid);
+}
+
+th {
+  background: var(--card);
+  color: var(--ink);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+ul,
+ol {
+  padding-left: 20px;
+}
+
+li {
+  margin: 6px 0;
+}
+
+a {
+  color: var(--accent);
+}
+
+code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.88em;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  padding: 1px 5px;
+}
+
+footer {
+  margin-top: 48px;
+  padding-top: 20px;
+  border-top: 1px solid var(--line);
+  color: var(--ink-subtle);
+  font-size: 0.86rem;
+}
+
+.nav {
+  margin-top: 8px;
+  font-size: 0.9rem;
+}
