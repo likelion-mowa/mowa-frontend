@@ -122,8 +122,8 @@ type RequestOptions = {
    */
   bodyless?: boolean;
   /**
-   * Upper bound for this request. Defaults to DEFAULT_TIMEOUT_MS; only AI
-   * generation overrides it.
+   * Upper bound for this request. Defaults to DEFAULT_TIMEOUT_MS; only
+   * server-side AI work overrides it.
    */
   timeoutMs?: number;
 };
@@ -342,8 +342,8 @@ export const api = {
    * server rejects them with a 400.
    *
    * `ApiResult<null>` is the type-level statement that this endpoint has no
-   * contracted response body. Callers derive the new record from the patch they
-   * sent (see `buildExperiencePatch`), never from what came back.
+   * contracted response body. The server may regenerate AI content during the
+   * update, so callers re-fetch the detail after a successful PATCH.
    */
   updateWalkExperience(
     experienceId: Uuid,
@@ -351,6 +351,7 @@ export const api = {
   ): Promise<ApiResult<null>> {
     return requestJson<null>('PATCH', endpoints.walkExperience(experienceId), body, {
       bodyless: true,
+      timeoutMs: AI_GENERATION_TIMEOUT_MS,
     });
   },
 

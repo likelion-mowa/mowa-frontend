@@ -27,11 +27,10 @@ import {
  * its own. `probeListQuery` keeps the server-side filters honest — see /debug.
  *
  * The write side (기능 8) edits and deletes one record. Both keep `detail` and
- * the cached `items` correct WITHOUT re-fetching: home and the archive load the
- * list once per mount, so a stale row would survive until the next cold entry,
- * and whether `router.replace` remounts an already-stacked screen is not
- * something to bet correctness on. See `updateExperience` for why applying the
- * request (rather than the response) is sound.
+ * the cached `items` correct: home and the archive load the list once per mount,
+ * so a stale row would survive until the next cold entry, and whether
+ * `router.replace` remounts an already-stacked screen is not something to bet
+ * correctness on.
  */
 
 export type ExperiencePhase = 'idle' | 'loading' | 'ready' | 'not-found' | 'error';
@@ -241,15 +240,41 @@ export const useExperiences = create<ExperienceState>((set, get) => {
 
       if (saved.ok) {
         append(`edit: ${experienceId} → 200 (${Object.keys(patch).join(', ')})`);
+        const refreshed = await api.getWalkExperience(experienceId);
+        if (refreshed.ok) {
+          set((state) => ({
+            editPhase: 'idle',
+            editError: null,
+            detail:
+              state.experienceId === experienceId && state.detail !== null
+                ? refreshed.value
+                : state.detail,
+            items: state.items.map((item) =>
+              item.experienceId === experienceId
+                ? {
+                    ...item,
+                    photoUrl: refreshed.value.photoUrl,
+                    title: refreshed.value.title,
+                    companion: refreshed.value.companion,
+                    emotions: refreshed.value.emotions,
+                    situation: refreshed.value.situation,
+                    tags: refreshed.value.tags,
+                  }
+                : item,
+            ),
+          }));
+          return true;
+        }
+
+        append(
+          `edit: detail refresh FAILED (${refreshed.status ?? 'network'}) — ${refreshed.error}`,
+        );
         set((state) => ({
           editPhase: 'idle',
           editError: null,
-          // The patch, not the response: the spec has no response body for this
-          // endpoint, and "omit = keep, sent = set" makes the resulting record
-          // fully determined by the request. `patch` cannot carry a snapshot
-          // column — `UpdateWalkExperienceRequest` has no such key — which is
-          // exactly why spreading it over `detail` is safe. Never spread the
-          // other way.
+          // PATCH already succeeded. If the follow-up GET fails, preserve the
+          // previous local behavior without retrying a potentially completed
+          // AI-backed PATCH.
           detail:
             state.experienceId === experienceId && state.detail !== null
               ? { ...state.detail, ...patch }
