@@ -67,7 +67,13 @@ const MUST_BE_PRESENT = [
   // the screen that consumes it. '생각에 잠긴' would NOT catch a regression here
   // — it comes from api/types.ts and ships even if this screen leaves the graph.
   ['diary context question', '함께였나요?'],
-  ['diary generating headline', '산책 기억을 만들고 있어요'],
+  // Guards the ai-loading extraction, the same way '함께였나요?' guards
+  // option-picker's. This headline moved to components/ai-loading.tsx and is
+  // now SHARED with the 수정 overlay on /experiences/[experienceId], so it
+  // proves that module shipped and nothing more. What still proves the
+  // /diary/generating ROUTE shipped is the failure headline below: it stayed
+  // behind in the screen's FAILED branch and exists nowhere else.
+  ['ai loading headline', '산책 기억을 만들고 있어요'],
   ['diary failure headline', '산책 기억을 만들지 못했어요'],
   ['diary preview header', '산책 기억 미리보기'],
   ['home subtitle', '당신의 산책을 모와드릴까요?'],
@@ -83,7 +89,8 @@ const MUST_BE_PRESENT = [
   // control; the sheet's headline is unique to the new module. The EDITOR has
   // none on purpose — every string in it is reused from the diary flow, so no
   // grep can distinguish it. It is a static import of this route, which makes
-  // Gate 1 and Gate 3 its real guards.
+  // Gate 1 and Gate 3 its real guards. Its saving overlay is the same case:
+  // every string it draws comes from the shared ai-loading module above.
   ['experience detail not-found', '삭제되었거나 존재하지 않는 기록이에요.'],
   ['delete sheet headline', '이 기록을 삭제할까요?'],
   // Auth + settings screens. One unique headline each, so a screen whose

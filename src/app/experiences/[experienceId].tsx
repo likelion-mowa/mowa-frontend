@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { ActivityIndicator, Image, Pressable, ScrollView, Text, View } from 'react-native';
+import { useEffect, useState, type ReactNode } from 'react';
+import { ActivityIndicator, Image, Keyboard, Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
 
@@ -9,6 +9,7 @@ import {
   SITUATION_LABELS,
   fromIsoDateTime,
 } from '@/api/types';
+import { AiLoadingOverlay } from '@/components/ai-loading';
 import { PrimaryButton } from '@/components/buttons';
 import { ConfirmDeleteSheet } from '@/components/confirm-delete-sheet';
 import { ExperienceEditor } from '@/components/experience-editor';
@@ -128,19 +129,45 @@ export default function ExperienceDetailScreen() {
 
   const goBack = () => router.replace(from === 'archive' ? '/archive' : '/');
 
+  // The saving cover sits outside every branch below, always the second child
+  // of the same root, so switching branches underneath it never remounts it.
+  // That is the whole reason it can fade OUT: on success the store lands the
+  // new `detail` and this screen leaves edit mode in the same commit, so by the
+  // time the cover starts going it is already sitting on the finished record.
+  // The exit uncovers the destination — never the form the user already left.
+  //
+  // `editPhase === 'saving'` alone covers its arrival; `overlayLingering` only
+  // extends its life past that so the exit has something to play on.
+  const [overlayLingering, setOverlayLingering] = useState(false);
+  useEffect(() => {
+    if (editPhase === 'saving') setOverlayLingering(true);
+  }, [editPhase]);
+
+  const withOverlay = (content: ReactNode) => (
+    <View className="flex-1">
+      {content}
+      {editPhase === 'saving' || overlayLingering ? (
+        <AiLoadingOverlay
+          visible={editPhase === 'saving'}
+          onHidden={() => setOverlayLingering(false)}
+        />
+      ) : null}
+    </View>
+  );
+
   if (phase === 'loading' || phase === 'idle' || loadedId !== experienceId) {
-    return (
+    return withOverlay(
       <SafeAreaView className="flex-1 bg-white">
         <ScreenHeader onBack={goBack} />
         <View className="flex-1 items-center justify-center">
           <ActivityIndicator color={colors.sage} />
         </View>
-      </SafeAreaView>
+      </SafeAreaView>,
     );
   }
 
   if (phase !== 'ready' || detail === null) {
-    return (
+    return withOverlay(
       <SafeAreaView className="flex-1 bg-parchment">
         <ScreenHeader onBack={goBack} />
         <View className="flex-1 items-center justify-center px-8">
@@ -159,14 +186,18 @@ export default function ExperienceDetailScreen() {
             />
           </View>
         </View>
-      </SafeAreaView>
+      </SafeAreaView>,
     );
   }
 
   // After the phase guards on purpose: a 404 arriving mid-edit tears the editor
   // down rather than leaving the user typing into a record that no longer exists.
   if (editing) {
-    return (
+    return withOverlay(
+      // The editor is never swapped out for the cover, only covered. Its draft
+      // is seeded exactly once (see its own note), so returning the loading
+      // body in its place would remount it, and a failed save would hand the
+      // user back a form with every edit reverted to the server's values.
       <ExperienceEditor
         detail={detail}
         saving={editPhase === 'saving'}
@@ -176,11 +207,16 @@ export default function ExperienceDetailScreen() {
           setEditing(false);
         }}
         onSave={(draft) => {
+          // The form keeps taps from dismissing the keyboard
+          // (keyboardShouldPersistTaps), and no overlay can cover one: on iOS
+          // it is an OS window above every RN view, and on web the focused
+          // input goes on receiving keystrokes underneath.
+          Keyboard.dismiss();
           void updateExperience(detail.experienceId, draft).then((saved) => {
             if (saved) setEditing(false);
           });
         }}
-      />
+      />,
     );
   }
 
@@ -203,10 +239,10 @@ export default function ExperienceDetailScreen() {
     />
   );
 
-  return (
+  return withOverlay(
     // The sheet is a sibling of the SafeAreaView, not a child, so its backdrop
     // reaches the notch instead of stopping at the safe area's padding.
-    <View className="flex-1">
+    <>
       <SafeAreaView className="flex-1 bg-white">
         {detail.photoUrl !== null ? (
           <View className="h-72 w-full">
@@ -317,6 +353,6 @@ export default function ExperienceDetailScreen() {
           }}
         />
       ) : null}
-    </View>
+    </>,
   );
 }
