@@ -590,6 +590,12 @@ final class WalkDetectorCore: NSObject {
                     return
                 }
                 DispatchQueue.main.async {
+                    // MOWA: a user-initiated enable starts the net fresh —
+                    // steps pocketed before pressing Start are not its
+                    // business. Deliberately absent from restoreIfNeeded: the
+                    // steps of a relaunch gap are exactly what the net exists
+                    // to announce.
+                    self.advanceWatermark(to: Date(), source: "enable")
                     self.registerObserverQuery()
                     self.isEnabled = true
                     self.mechanism = finalMechanism
@@ -683,11 +689,16 @@ final class WalkDetectorCore: NSObject {
             Self.log.notice("observer_steps windowStart=\(start.timeIntervalSince1970) sum=\(sum)")
 
             guard sum >= Double(self.thresholdSteps) else {
-                // Absorb sub-threshold steps instead of letting them pool: the
-                // retired lastSeenSteps baseline advanced on every read, and
-                // without this, two hours of ambient shuffling would cross the
-                // threshold and fire the net while the live layer is fine.
-                self.advanceWatermark(to: end, source: "absorb")
+                // MOWA: NO watermark advance here. Samples are dated when
+                // walked but committed 7–18 min later, so a sub-threshold fire
+                // may simply be EARLY — advancing to `end` claimed steps the
+                // query had never seen, and a walk whose commit lagged one
+                // unrelated fire was swallowed forever (measured 2026-08-20
+                // 01:20: three fires each sum=0 while the walked samples sat
+                // uncommitted behind the already-advanced watermark). Ambient
+                // pooling, which this advance used to cap, is the liveness
+                // gate's job below; sub-threshold leftovers age out through
+                // the 2-hour clamp.
                 return
             }
 
