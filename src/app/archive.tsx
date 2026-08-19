@@ -35,28 +35,45 @@ import { useAuth } from '@/stores/auth-store';
 /**
  * 기록장 — the archive (prototype ArchiveScreen, src/App.tsx 1829-1968).
  *
- * Two views over the same list: a photo grid grouped by month and a calendar.
- * Grouping and filtering run in Asia/Seoul (src/lib/kst.ts) so a walk lands on
- * the same day the server would put it on.
+ * Two views over the same list: a photo grid and a calendar. Grouping runs in
+ * Asia/Seoul (src/lib/kst.ts) so a walk lands on the same day the server would
+ * put it on.
+ *
+ * The 년/월/전체 tabs GROUP the grid, they do not filter it — every tab shows
+ * every saved walk. What changes is the bucket size, and with it how much of
+ * the date a tile has to spell out: the tile says exactly what the header above
+ * it does not. 전체 has no header at all, so its tiles carry the year.
  *
  * Deliberate reading of the prototype, flagged in the PR:
- * - the period tabs filter the grid; the calendar's own month navigation is
- *   its period control, so it always reads the full list;
- * - the stats count every walk, not the filtered subset (the prototype does
- *   the same);
+ * - the calendar's own month navigation is its period control, so it always
+ *   reads the full list and ignores the tabs;
+ * - the stats count every walk (the prototype does the same);
  * - the prototype keeps one walk per calendar day and silently drops the rest.
  *   Here the cell shows the latest walk of the day with a count badge, and the
  *   list under the calendar shows every one of them.
  */
 
 type ViewMode = 'grid' | 'calendar';
-type PeriodFilter = 'year' | 'month' | 'all';
+/** What the grid is bucketed by. Also decides how much date a tile writes. */
+type GroupMode = 'year' | 'month' | 'all';
 
-const PERIODS: { label: string; value: PeriodFilter }[] = [
+const GROUP_MODES: { label: string; value: GroupMode }[] = [
   { label: '년', value: 'year' },
   { label: '월', value: 'month' },
   { label: '전체', value: 'all' },
 ];
+
+/** 전체 drops every walk in one bucket, and draws no header above it. */
+function groupKeyOf(parts: KstParts, mode: GroupMode): string {
+  switch (mode) {
+    case 'year':
+      return `${parts.year}`;
+    case 'month':
+      return `${parts.year}-${parts.month}`;
+    case 'all':
+      return 'all';
+  }
+}
 
 const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'];
 
@@ -71,19 +88,31 @@ function openDetail(experienceId: string) {
  * 누적 시간 needs a duration per row and the list response carries none yet
  * (docs/api-implementation.md 공백 8). Summing only when every row has one
  * keeps the number honest and lights it up by itself once the field ships.
+ *
+ * Minutes, not hours: a walk is a half-hour thing, so an archive with a few of
+ * them read `0.6시간` — a unit the reader has to convert back before it means
+ * anything. Every other duration on this screen is already in minutes (the
+ * calendar cells and the month list both call formatDurationMinutes), so the
+ * stat now matches the numbers sitting next to it.
+ *
+ * Not formatDurationMinutes itself: its `Math.max(1, …)` floor exists so one
+ * short walk never reads 0분, and applying that to a SUM would make a loaded
+ * archive of zero-length walks claim 1분.
  */
-function totalHoursLabel(items: WalkExperienceListItem[]): string {
-  if (items.length === 0) return '0시간';
+function totalMinutesLabel(items: WalkExperienceListItem[]): string {
+  if (items.length === 0) return '0분';
   const seconds = items.reduce((sum, item) => sum + (item.durationSeconds ?? 0), 0);
   const complete = items.every((item) => item.durationSeconds != null);
-  return complete ? `${(seconds / 3600).toFixed(1)}시간` : '—';
+  return complete ? `${Math.round(seconds / 60)}분` : '—';
 }
 
-function inPeriod(item: WalkExperienceListItem, period: PeriodFilter, today: KstParts): boolean {
-  if (period === 'all') return true;
+/**
+ * The tabs only group now, so the one thing left that still compares a walk
+ * against today is the 이번 달 stat.
+ */
+function isThisMonth(item: WalkExperienceListItem, today: KstParts): boolean {
   const parts = kstPartsFromIso(item.startedAt);
-  if (parts.year !== today.year) return false;
-  return period === 'year' || parts.month === today.month;
+  return parts.year === today.year && parts.month === today.month;
 }
 
 // -----------------------------------------------------------------------------
@@ -134,20 +163,47 @@ function ViewToggle({ mode, onChange }: { mode: ViewMode; onChange: (next: ViewM
 // Photo grid
 // -----------------------------------------------------------------------------
 
-function MonthLabelCell({ size, parts }: { size: number; parts: KstParts }) {
+/**
+ * `'all'` is excluded from the prop rather than handled inside: that mode draws
+ * no header, and making it unrepresentable means a stray label cell fails to
+ * compile instead of appearing on screen.
+ */
+function GroupLabelCell({
+  size,
+  parts,
+  mode,
+}: {
+  size: number;
+  parts: KstParts;
+  mode: Exclude<GroupMode, 'all'>;
+}) {
   return (
     <View
       style={{ width: size, height: size }}
       className="items-center justify-center bg-mint-pale">
-      <Text className="text-[11px] font-semibold tracking-wider text-sage">{parts.year}</Text>
-      <Text className="text-[24px] font-bold leading-none text-ink">{`${parts.month}월`}</Text>
+      {mode === 'month' ? (
+        <>
+          <Text className="text-[11px] font-semibold tracking-wider text-sage">{parts.year}</Text>
+          <Text className="text-[24px] font-bold leading-none text-ink">{`${parts.month}월`}</Text>
+        </>
+      ) : (
+        <Text className="text-[24px] font-bold leading-none text-ink">{`${parts.year}년`}</Text>
+      )}
     </View>
   );
 }
 
-function GridTile({ size, item }: { size: number; item: WalkExperienceListItem }) {
+function GridTile({
+  size,
+  item,
+  mode,
+}: {
+  size: number;
+  item: WalkExperienceListItem;
+  mode: GroupMode;
+}) {
   const { scale, onPressIn, onPressOut } = usePressScale();
-  const { day } = kstPartsFromIso(item.startedAt);
+  const { year, month, day } = kstPartsFromIso(item.startedAt);
 
   return (
     <Pressable
@@ -165,7 +221,17 @@ function GridTile({ size, item }: { size: number; item: WalkExperienceListItem }
             style={StyleSheet.absoluteFill}
           />
           <View className="absolute bottom-0 left-0 px-2 pb-2">
-            <Text className="text-[18px] font-bold text-white">{`${day}일`}</Text>
+            {/* 전체 has no group header, so the tile owns the year. Same rhythm
+                GroupLabelCell uses — small year over the big date — which keeps
+                the large line in the same place across all three tabs. */}
+            {mode === 'all' ? (
+              <Text className="text-[11px] font-semibold tracking-wider text-white/70">
+                {year}
+              </Text>
+            ) : null}
+            <Text className="text-[18px] font-bold text-white">
+              {mode === 'month' ? `${day}일` : `${month}월 ${day}일`}
+            </Text>
           </View>
         </View>
       </Animated.View>
@@ -194,34 +260,38 @@ function useMeasuredWidth(): readonly [number, (event: LayoutChangeEvent) => voi
   return [width, onLayout] as const;
 }
 
-function PhotoGrid({ items }: { items: WalkExperienceListItem[] }) {
+function PhotoGrid({ items, mode }: { items: WalkExperienceListItem[]; mode: GroupMode }) {
   const [width, onLayout] = useMeasuredWidth();
   const size = (width - GRID_GAP * (GRID_COLUMNS - 1)) / GRID_COLUMNS;
 
-  // Rows arrive sorted startedAt DESC, so first-seen month order is newest
+  // Rows arrive sorted startedAt DESC, so first-seen group order is newest
   // first and each group keeps that order.
-  const months = useMemo(() => {
-    const groups: { key: string; parts: KstParts; items: WalkExperienceListItem[] }[] = [];
+  const groups = useMemo(() => {
+    const out: { key: string; parts: KstParts; items: WalkExperienceListItem[] }[] = [];
     for (const item of items) {
       const parts = kstPartsFromIso(item.startedAt);
-      const key = `${parts.year}-${parts.month}`;
-      const group = groups.find((candidate) => candidate.key === key);
-      if (group === undefined) groups.push({ key, parts, items: [item] });
+      const key = groupKeyOf(parts, mode);
+      const group = out.find((candidate) => candidate.key === key);
+      // `parts` belongs to the group's FIRST row. Year mode reads only `.year`
+      // from it, and 전체 reads nothing — it draws no header.
+      if (group === undefined) out.push({ key, parts, items: [item] });
       else group.items.push(item);
     }
-    return groups;
-  }, [items]);
+    return out;
+  }, [items, mode]);
 
   return (
     // Nothing is drawn until the first layout reports a width — one frame, and
     // the alternative is a flash of zero-sized tiles.
     <View onLayout={onLayout}>
       {width > 0
-        ? months.map((month) => (
-            <View key={month.key} className="flex-row flex-wrap" style={{ gap: GRID_GAP }}>
-              <MonthLabelCell size={size} parts={month.parts} />
-              {month.items.map((item) => (
-                <GridTile key={item.experienceId} size={size} item={item} />
+        ? groups.map((group) => (
+            <View key={group.key} className="flex-row flex-wrap" style={{ gap: GRID_GAP }}>
+              {mode === 'all' ? null : (
+                <GroupLabelCell size={size} parts={group.parts} mode={mode} />
+              )}
+              {group.items.map((item) => (
+                <GridTile key={item.experienceId} size={size} item={item} mode={mode} />
               ))}
             </View>
           ))
@@ -411,8 +481,10 @@ function EmptyState() {
     <View className="flex-1 items-center justify-center px-8 py-16">
       <Text className="mb-4 text-6xl">🌿</Text>
       <Text className="mb-2 text-center text-[17px] font-bold text-ink">산책 기록이 없어요</Text>
+      {/* No filter left to change — every tab shows every walk, so reaching
+          this screen means the archive is genuinely empty. */}
       <Text className="text-center text-sm leading-relaxed text-ink-muted">
-        필터를 변경하거나{'\n'}첫 산책을 기록해보세요.
+        첫 산책을 기록해보세요.
       </Text>
     </View>
   );
@@ -439,12 +511,12 @@ function ErrorState({ onRetry }: { onRetry: () => void }) {
 
 // -----------------------------------------------------------------------------
 
-function PeriodFilterBar({
-  period,
+function GroupModeBar({
+  mode,
   onChange,
 }: {
-  period: PeriodFilter;
-  onChange: (next: PeriodFilter) => void;
+  mode: GroupMode;
+  onChange: (next: GroupMode) => void;
 }) {
   return (
     <GlassBarShell>
@@ -454,8 +526,8 @@ function PeriodFilterBar({
 
       <GlassPill>
         <View className="h-full flex-row items-center p-1">
-          {PERIODS.map((entry) => {
-            const active = entry.value === period;
+          {GROUP_MODES.map((entry) => {
+            const active = entry.value === mode;
             return (
               <Pressable
                 key={entry.value}
@@ -490,8 +562,8 @@ export default function ArchiveScreen() {
   const nickname = useAuth((state) => state.user?.nickname ?? null);
   const signedIn = useAuth((state) => state.status === 'signed-in');
 
-  const [mode, setMode] = useState<ViewMode>('grid');
-  const [period, setPeriod] = useState<PeriodFilter>('all');
+  const [viewMode, setViewMode] = useState<ViewMode>('grid');
+  const [groupMode, setGroupMode] = useState<GroupMode>('all');
 
   // Gated on the session: a reload mounts this screen while the token is still
   // being restored, and an ungated fetch would fire without one.
@@ -501,12 +573,8 @@ export default function ArchiveScreen() {
   }, [signedIn, loadList]);
 
   const today = useMemo(() => kstNow(Date.now()), []);
-  const filtered = useMemo(
-    () => items.filter((item) => inPeriod(item, period, today)),
-    [items, period, today],
-  );
   const thisMonthCount = useMemo(
-    () => items.filter((item) => inPeriod(item, 'month', today)).length,
+    () => items.filter((item) => isThisMonth(item, today)).length,
     [items, today],
   );
 
@@ -549,10 +617,10 @@ export default function ArchiveScreen() {
           <View className="w-px bg-line" />
           <Stat value={unknown ? '—' : `${thisMonthCount}회`} label="이번 달" />
           <View className="w-px bg-line" />
-          <Stat value={unknown ? '—' : totalHoursLabel(items)} label="누적 시간" />
+          <Stat value={unknown ? '—' : totalMinutesLabel(items)} label="누적 시간" />
         </View>
 
-        <ViewToggle mode={mode} onChange={setMode} />
+        <ViewToggle mode={viewMode} onChange={setViewMode} />
       </View>
 
       <View className="flex-1 bg-parchment">
@@ -563,23 +631,23 @@ export default function ArchiveScreen() {
             <View className="items-center py-16">
               <ActivityIndicator color={colors.sage} />
             </View>
-          ) : mode === 'calendar' ? (
+          ) : viewMode === 'calendar' ? (
             <CalendarView items={items} />
-          ) : filtered.length === 0 ? (
+          ) : items.length === 0 ? (
             <EmptyState />
           ) : (
-            <PhotoGrid items={filtered} />
+            <PhotoGrid items={items} mode={groupMode} />
           )}
         </ScrollView>
       </View>
 
-      <PeriodFilterBar
-        period={period}
+      <GroupModeBar
+        mode={groupMode}
         onChange={(next) => {
-          setPeriod(next);
-          // The tabs filter the grid; the calendar navigates by month instead.
+          setGroupMode(next);
+          // The tabs group the grid; the calendar navigates by month instead.
           // Switching here keeps the control from doing nothing visible.
-          setMode('grid');
+          setViewMode('grid');
         }}
       />
     </SafeAreaView>
