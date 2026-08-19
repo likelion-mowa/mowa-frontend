@@ -133,8 +133,8 @@ docs/                     # API 및 개발 관련 문서
 ### 1. Clone
 
 ```bash
-git clone https://github.com/likelion-walk-diary/walk-diary-frontend.git
-cd walk-diary-frontend
+git clone https://github.com/likelion-mowa/mowa-frontend.git
+cd mowa-frontend
 npm install
 ```
 
