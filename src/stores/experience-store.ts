@@ -39,6 +39,21 @@ export type EditPhase = 'idle' | 'saving';
 export type DeletePhase = 'idle' | 'deleting';
 
 /**
+ * A floor on how long the 수정 overlay stays up, mirroring MIN_GENERATION_MS in
+ * diary-flow-store. The pair is deliberately duplicated rather than shared, so
+ * either flow can be retuned without moving the other.
+ *
+ * It is here for the fast answers, not the slow ones. Against the real backend
+ * the PATCH regenerates the diary and takes seconds, so this never engages; the
+ * mock rewrites the row and returns at once, running no AI at all, and so does
+ * any edit the server decides not to regenerate. Without the floor a
+ * full-screen loading body flashes up and vanishes, which reads as a bug.
+ */
+const MIN_SAVING_DISPLAY_MS = 1200;
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
  * Shaped like auth-store's `signInMessage`. A network failure gets our own
  * copy; anything else surfaces the server's `message`, because the client has
  * no way to know which of 기능 8's ten validation rules fired and the server's
@@ -236,12 +251,21 @@ export const useExperiences = create<ExperienceState>((set, get) => {
       }
 
       set({ editPhase: 'saving', editError: null });
+      const savingSince = Date.now();
+      // Every branch below leaves 'saving', so every branch owes the floor: a
+      // failure that snaps back instantly is the same flash as a fast success.
+      // The three early returns above never entered it and must not wait.
+      const holdOverlay = async () => {
+        const elapsed = Date.now() - savingSince;
+        if (elapsed < MIN_SAVING_DISPLAY_MS) await sleep(MIN_SAVING_DISPLAY_MS - elapsed);
+      };
       const saved = await api.updateWalkExperience(experienceId, patch);
 
       if (saved.ok) {
         append(`edit: ${experienceId} → 200 (${Object.keys(patch).join(', ')})`);
         const refreshed = await api.getWalkExperience(experienceId);
         if (refreshed.ok) {
+          await holdOverlay();
           set((state) => ({
             editPhase: 'idle',
             editError: null,
@@ -269,6 +293,7 @@ export const useExperiences = create<ExperienceState>((set, get) => {
         append(
           `edit: detail refresh FAILED (${refreshed.status ?? 'network'}) — ${refreshed.error}`,
         );
+        await holdOverlay();
         set((state) => ({
           editPhase: 'idle',
           editError: null,
@@ -290,6 +315,7 @@ export const useExperiences = create<ExperienceState>((set, get) => {
       // not-found card already says the right thing.
       if (saved.status === 404) {
         append(`edit: ${experienceId} not found`);
+        await holdOverlay();
         set((state) => ({
           editPhase: 'idle',
           editError: null,
@@ -301,6 +327,7 @@ export const useExperiences = create<ExperienceState>((set, get) => {
       }
 
       append(`edit: PATCH FAILED (${saved.status ?? 'network'}) — ${saved.error}`);
+      await holdOverlay();
       set({ editPhase: 'idle', editError: writeFailureMessage(saved) });
       return false;
     },
