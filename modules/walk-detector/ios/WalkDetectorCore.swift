@@ -702,6 +702,24 @@ final class WalkDetectorCore: NSObject {
                 return
             }
 
+            // MOWA: liveness gate. If OUR pedometer subscription produced a
+            // callback inside the query window, the live layer was awake while
+            // these steps were walked and chose not to sessionize them (short
+            // shuffles, low confidence) — the net must not second-guess that
+            // with a raw sum (measured 2026-08-19 23:56: 142 pooled ambient
+            // steps announced as a walk while live was healthy). The test is
+            // witnessing the WINDOW, not "callback within N minutes": fresh
+            // HealthKit steps with no callback in their window PROVE the
+            // subscription was dead, while a putter-then-idle pool would
+            // out-age any recency bar by the time a late fire arrives. nil =
+            // no live layer at all (observer-only mode, fresh relaunch,
+            // degraded restore) — exactly when the net must stay armed.
+            if let witnessed = self.lastPedometerAt, witnessed >= start {
+                Self.log.notice("notification_suppressed reason=live-alive lastPedometerAt=\(witnessed.timeIntervalSince1970)")
+                self.advanceWatermark(to: end, source: "live-alive")
+                return
+            }
+
             // Watermark untouched on a cooldown miss too: these steps were
             // never announced, so the next fire after the quiet period must
             // still see them — the retired scheme's baseline update silently
