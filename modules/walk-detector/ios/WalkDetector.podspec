@@ -4,7 +4,7 @@ Pod::Spec.new do |s|
   s.summary        = 'Background walk detection (stub).'
   s.description    = 'JS <-> Swift surface for walk detection. Detection logic lands in a later session.'
   s.author         = ''
-  s.homepage       = 'https://github.com/likelion-walk-diary/walk-diary-frontend'
+  s.homepage = 'https://github.com/likelion-mowa/mowa-frontend'
   # 16.4 is the Expo SDK 56+ minimum deployment target.
   s.platforms      = {
     :ios => '16.4'
