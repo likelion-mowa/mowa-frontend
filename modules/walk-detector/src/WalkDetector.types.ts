@@ -106,6 +106,14 @@ export type WalkDetectorDiagnostics = {
    * the device.
    */
   lastObserverFiredAtMs: number | null;
+  /**
+   * The safety net's dedupe watermark: steps with HealthKit sample dates at or
+   * before this are already handled (live-confirmed walk, or announced by the
+   * observer itself), so the observer never notifies for them again. Null =
+   * never written on this install. Advancing to a walk's end time after each
+   * detection is what proves the double-notification fix on a device.
+   */
+  stepsAccountedUntilMs: number | null;
   /** Sensor liveness. A stale value with detection running means a dead subscription. */
   lastActivityAtMs: number | null;
   lastPedometerAtMs: number | null;
