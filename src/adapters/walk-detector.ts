@@ -74,6 +74,7 @@ export const walkDetector: WalkDetectorPort = {
         thresholdSteps: 0,
         cooldownSeconds: 0,
         lastObserverFiredAtMs: null,
+        stepsAccountedUntilMs: null,
         lastActivityAtMs: null,
         lastPedometerAtMs: null,
       },

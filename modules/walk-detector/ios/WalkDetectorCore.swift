@@ -53,9 +53,17 @@ final class WalkDetectorCore: NSObject {
         // only the notification is withheld.
         static let notificationsEnabled = "walk.notificationsEnabled"
         static let lastNotifiedAt = "walk.lastNotifiedAt"
-        static let lastSeenSteps = "walk.lastSeenSteps"
-        // MOWA: safety-net arbitration state — see handleObserverFired.
-        static let lastLiveNotifiedAt = "walk.lastLiveNotifiedAt"
+        // MOWA: safety-net dedupe watermark — steps with sample dates at or
+        // before this instant were handled by the live layer or already
+        // announced by the observer. Replaces the lastSeenSteps /
+        // lastLiveNotifiedAt fire-time arbitration (2026-08-19): that scheme
+        // compared the live notification against the PREVIOUS observer fire,
+        // so any fire that learned nothing (locked-device read failure,
+        // partial HealthKit commit) consumed the marker and let the same walk
+        // notify twice. Orphaned values of the two retired keys on existing
+        // installs are inert.
+        static let stepsAccountedUntil = "walk.stepsAccountedUntil"
+        // Diagnostic only (/debug "observer last fired") — not arbitration.
         static let lastObserverFiredAt = "walk.lastObserverFiredAt"
     }
 
@@ -461,12 +469,17 @@ final class WalkDetectorCore: NSObject {
         // control are separate concerns.
         onWalkDetected?(event)
 
+        // MOWA: the live layer has fully handled this walk — the candidate
+        // event above, the notification decision below — so the observer must
+        // never re-announce its steps. Deliberately OUTSIDE the cooldown
+        // branch: a cooldown-suppressed walk still produced a candidate, and
+        // the safety net exists for walks the live layer MISSED, not ones it
+        // chose to keep quiet about.
+        advanceWatermark(to: endedAt, source: "live")
+
         if passesCooldown() {
-            let now = Date()
-            // MOWA: the observer's live-covered suppression keys off this timestamp.
-            UserDefaults.standard.set(now.timeIntervalSince1970, forKey: Keys.lastLiveNotifiedAt)
             // 알림은 **여기 네이티브에서** 발송합니다. JS 가 떠 있는지와 무관하게 동작해야 하므로.
-            postNotification(steps: walked, issuedAt: now)
+            postNotification(steps: walked, issuedAt: Date())
         }
 
         resetWalkSession()
@@ -503,6 +516,16 @@ final class WalkDetectorCore: NSObject {
         }
         UserDefaults.standard.set(now, forKey: Keys.lastNotifiedAt)
         return true
+    }
+
+    /// MOWA: monotone advance only. The observer's dedupe rests entirely on
+    /// this value, so it must never move backwards — a clock hiccup or an
+    /// out-of-order caller would otherwise reopen the double-notification bug.
+    private func advanceWatermark(to date: Date, source: String) {
+        let current = UserDefaults.standard.double(forKey: Keys.stepsAccountedUntil)
+        let next = max(current, date.timeIntervalSince1970)
+        UserDefaults.standard.set(next, forKey: Keys.stepsAccountedUntil)
+        Self.log.notice("watermark_advanced source=\(source, privacy: .public) to=\(next)")
     }
 
     private func postNotification(steps: Int, issuedAt: Date) {
@@ -567,6 +590,12 @@ final class WalkDetectorCore: NSObject {
                     return
                 }
                 DispatchQueue.main.async {
+                    // MOWA: a user-initiated enable starts the net fresh —
+                    // steps pocketed before pressing Start are not its
+                    // business. Deliberately absent from restoreIfNeeded: the
+                    // steps of a relaunch gap are exactly what the net exists
+                    // to announce.
+                    self.advanceWatermark(to: Date(), source: "enable")
                     self.registerObserverQuery()
                     self.isEnabled = true
                     self.mechanism = finalMechanism
@@ -600,16 +629,37 @@ final class WalkDetectorCore: NSObject {
     private func handleObserverFired() {
         guard let stepType = HKQuantityType.quantityType(forIdentifier: .stepCount) else { return }
 
-        // MOWA: safety-net arbitration state. A live notification between the
-        // previous fire and this one proves the keepalive layer is alive, so
-        // the observer must stay silent below — cooldown alone cannot dedupe
-        // (measured 2026-08-13: the two paths notified 418 s apart against a
-        // 300 s cooldown).
-        let previousFireAt = UserDefaults.standard.double(forKey: Keys.lastObserverFiredAt)
+        // Diagnostic only: /debug's "observer last fired" row. A read that
+        // fails below still WAS a fire, so recording it up front is correct —
+        // and since the dedupe no longer keys off fire times, recording it
+        // early consumes nothing (the retired scheme's exact mistake).
         UserDefaults.standard.set(Date().timeIntervalSince1970, forKey: Keys.lastObserverFiredAt)
 
+        // First fire on this install (or after the update that introduced the
+        // watermark): only set the baseline. Same shape as the retired
+        // observer_baseline_set fix — double(forKey:) reads a missing key as 0,
+        // which would otherwise turn the whole window into "new" steps the
+        // moment the mechanism is toggled on.
+        guard UserDefaults.standard.object(forKey: Keys.stepsAccountedUntil) != nil else {
+            UserDefaults.standard.set(Date().timeIntervalSince1970, forKey: Keys.stepsAccountedUntil)
+            Self.log.notice("observer_watermark_init")
+            return
+        }
+
+        // MOWA: the dedupe IS the query bound. HealthKit stamps step samples
+        // with the time they were walked, not the time they were committed, so
+        // summing only past the watermark structurally excludes every
+        // already-handled walk — including its late-committing chunks, which
+        // the retired delta scheme re-announced (double notification measured
+        // 2026-08-14: observer 11:54:28 vs live 11:55:27 against a 300 s
+        // cooldown). The 2-hour clamp keeps the old "a walk older than this is
+        // not worth announcing" semantics and caps ambient-step accumulation
+        // across long detection gaps.
         let end = Date()
-        let start = end.addingTimeInterval(-2 * 3600)
+        let watermark = Date(
+            timeIntervalSince1970: UserDefaults.standard.double(forKey: Keys.stepsAccountedUntil)
+        )
+        let start = max(watermark, end.addingTimeInterval(-2 * 3600))
         let predicate = HKQuery.predicateForSamples(withStart: start, end: end)
 
         let query = HKStatisticsQuery(
@@ -621,62 +671,74 @@ final class WalkDetectorCore: NSObject {
             // ⚠️ 기기가 잠겨 있으면 HealthKit 을 읽을 수 없습니다
             // (Protected Unless Open, 잠금 ~10분 후 차단). 값이 없는 것과 걸음이 0인 것을
             // 구분해서 기록해야 나중에 결과를 오해하지 않습니다.
-            // MOWA: the error param used to be dropped, which conflated "no
-            // samples in the window" with "device locked" — and the empty
-            // window then blocked the first baseline (measured 11:43,
-            // 2026-08-13). errorNoData IS a valid answer: the window sum is 0.
+            // errorNoData IS a valid answer: the window sum is 0.
             if let error {
                 let nsError = error as NSError
                 let isNoData = nsError.domain == HKErrorDomain
                     && nsError.code == HKError.Code.errorNoData.rawValue
                 if !isNoData {
+                    // MOWA: watermark untouched — a fire that learned nothing
+                    // consumes nothing. The retired scheme advanced its marker
+                    // here, which is exactly how a locked-device fire let the
+                    // NEXT fire re-announce an already-notified walk.
                     Self.log.notice("observer_read_failed error=\(error.localizedDescription, privacy: .public) (기기 잠금 중일 수 있음)")
                     return
                 }
             }
             let sum = statistics?.sumQuantity()?.doubleValue(for: .count()) ?? 0
+            Self.log.notice("observer_steps windowStart=\(start.timeIntervalSince1970) sum=\(sum)")
 
-            // MOWA: upstream bug fix (03-findings.md 알려진 버그 #2). double(forKey:)
-            // returns 0 for a missing key, so the very first observer fire treated
-            // the whole 2-hour window as newly walked steps and notified the moment
-            // the mechanism was toggled on. On first fire, only set the baseline.
-            if UserDefaults.standard.object(forKey: Keys.lastSeenSteps) == nil {
-                UserDefaults.standard.set(sum, forKey: Keys.lastSeenSteps)
-                Self.log.notice("observer_baseline_set total=\(sum)")
+            guard sum >= Double(self.thresholdSteps) else {
+                // MOWA: NO watermark advance here. Samples are dated when
+                // walked but committed 7–18 min later, so a sub-threshold fire
+                // may simply be EARLY — advancing to `end` claimed steps the
+                // query had never seen, and a walk whose commit lagged one
+                // unrelated fire was swallowed forever (measured 2026-08-20
+                // 01:20: three fires each sum=0 while the walked samples sat
+                // uncommitted behind the already-advanced watermark). Ambient
+                // pooling, which this advance used to cap, is the liveness
+                // gate's job below; sub-threshold leftovers age out through
+                // the 2-hour clamp.
                 return
             }
 
-            let previous = UserDefaults.standard.double(forKey: Keys.lastSeenSteps)
-            UserDefaults.standard.set(sum, forKey: Keys.lastSeenSteps)
-            let delta = sum - previous
-            Self.log.notice("observer_steps total=\(sum) delta=\(delta)")
-
-            guard delta >= Double(self.thresholdSteps) else { return }
-
-            // MOWA: the live layer is mid-walk, or holding an end that is about
-            // to be confirmed. It will notify within the debounce, with the real
-            // step count for THIS walk — the observer would only beat it to the
-            // punch with a 2-hour delta and burn the shared cooldown, which is
-            // exactly what happened on 2026-08-14 (observer 11:54:28, live
-            // suppressed 11:55:27 reason=cooldown). The net exists for a live
-            // layer that is dead, not one that is working.
+            // MOWA: the live layer is mid-walk, or holding an end that is
+            // about to be confirmed. It will notify with the real step count
+            // for THIS walk and advance the watermark past these samples; if
+            // it dies mid-walk instead, the watermark is untouched and the
+            // next fire rescues them. The net exists for a live layer that is
+            // dead, not one that is working.
             if self.walkStartedAt != nil {
                 Self.log.notice("notification_suppressed reason=live-pending")
                 return
             }
 
-            // The live layer already told the user about this walk.
-            // Known gap: if the keepalive dies BETWEEN two walks inside one
-            // fire interval, the second walk is absorbed here — accepted; the
-            // net targets "keepalive silently dead for hours", not that race.
-            let lastLive = UserDefaults.standard.double(forKey: Keys.lastLiveNotifiedAt)
-            if lastLive > previousFireAt {
-                Self.log.notice("notification_suppressed reason=live-covered lastLive=\(lastLive)")
+            // MOWA: liveness gate. If OUR pedometer subscription produced a
+            // callback inside the query window, the live layer was awake while
+            // these steps were walked and chose not to sessionize them (short
+            // shuffles, low confidence) — the net must not second-guess that
+            // with a raw sum (measured 2026-08-19 23:56: 142 pooled ambient
+            // steps announced as a walk while live was healthy). The test is
+            // witnessing the WINDOW, not "callback within N minutes": fresh
+            // HealthKit steps with no callback in their window PROVE the
+            // subscription was dead, while a putter-then-idle pool would
+            // out-age any recency bar by the time a late fire arrives. nil =
+            // no live layer at all (observer-only mode, fresh relaunch,
+            // degraded restore) — exactly when the net must stay armed.
+            if let witnessed = self.lastPedometerAt, witnessed >= start {
+                Self.log.notice("notification_suppressed reason=live-alive lastPedometerAt=\(witnessed.timeIntervalSince1970)")
+                self.advanceWatermark(to: end, source: "live-alive")
                 return
             }
 
+            // Watermark untouched on a cooldown miss too: these steps were
+            // never announced, so the next fire after the quiet period must
+            // still see them — the retired scheme's baseline update silently
+            // swallowed the walk here.
             guard self.passesCooldown() else { return }
-            self.postNotification(steps: Int(delta), issuedAt: Date())
+
+            self.advanceWatermark(to: end, source: "observer")
+            self.postNotification(steps: Int(sum), issuedAt: Date())
         }
         healthStore.execute(query)
     }
@@ -865,6 +927,13 @@ final class WalkDetectorCore: NSObject {
             "lastObserverFiredAtMs": Self.epochMsOrNull(
                 epochSeconds: UserDefaults.standard.double(forKey: Keys.lastObserverFiredAt)
             ),
+            // The net's dedupe state: steps dated at or before this instant
+            // are already handled. Watching this row advance to a walk's end
+            // time is how the double-notification fix is verified on device
+            // without pulling os_log off the phone.
+            "stepsAccountedUntilMs": Self.epochMsOrNull(
+                epochSeconds: UserDefaults.standard.double(forKey: Keys.stepsAccountedUntil)
+            ),
             "lastActivityAtMs": Self.epochMsOrNull(lastActivityAt),
             "lastPedometerAtMs": Self.epochMsOrNull(lastPedometerAt),
         ]
@@ -875,9 +944,9 @@ final class WalkDetectorCore: NSObject {
         return date.timeIntervalSince1970 * 1000
     }
 
-    /// handleObserverFired stores its timestamps as epoch SECONDS (`:591`), and
-    /// `double(forKey:)` answers 0 for a key that was never written — which here
-    /// means "never fired on this install", not 1970.
+    /// The observer path stores its timestamps as epoch SECONDS, and
+    /// `double(forKey:)` answers 0 for a key that was never written — which
+    /// here means "never written on this install", not 1970.
     private static func epochMsOrNull(epochSeconds: Double) -> Any {
         guard epochSeconds > 0 else { return NSNull() }
         return epochSeconds * 1000

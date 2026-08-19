@@ -151,6 +151,7 @@ public class WalkDetectorModule: Module {
           "thresholdSteps": (status["thresholdSteps"] as? Int) ?? 0,
           "cooldownSeconds": (status["cooldownSeconds"] as? Double) ?? 0,
           "lastObserverFiredAtMs": status["lastObserverFiredAtMs"] ?? NSNull(),
+          "stepsAccountedUntilMs": status["stepsAccountedUntilMs"] ?? NSNull(),
           "lastActivityAtMs": status["lastActivityAtMs"] ?? NSNull(),
           "lastPedometerAtMs": status["lastPedometerAtMs"] ?? NSNull(),
           // 설정 > 기록 제안 알림. Read back rather than mirrored in JS: the

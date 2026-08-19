@@ -62,8 +62,8 @@ export interface WalkDetectorPort {
    * The step bar a walk must pass to qualify (기본 30, 사용자 설정 10~100).
    * The Core reads this live from UserDefaults on every pedometer callback, so
    * it applies immediately — no restart needed. Shared with the HealthKit
-   * safety net's 2-hour delta check, so lowering it also raises that net's
-   * false-positive rate; that is accepted, not a bug.
+   * safety net's watermark-bounded step sum, so lowering it also raises that
+   * net's false-positive rate; that is accepted, not a bug.
    */
   setThresholdSteps(steps: number): Promise<AdapterResult<boolean>>;
   /** Minimum gap between two walk notifications (기본 300초). Applies to the next check, no restart. */

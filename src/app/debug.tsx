@@ -382,6 +382,16 @@ export default function SmokeScreen() {
             label="observer last fired"
             value={state.diagnostics ? agoLabel(state.diagnostics.lastObserverFiredAtMs) : '—'}
           />
+          {/*
+            The net's dedupe watermark: steps dated at or before this are
+            already handled. After a detected walk this should advance to that
+            walk's end time — if it does not, the double-notification bug is
+            back. 'never' = unwritten until the observer's first fire.
+          */}
+          <Row
+            label="observer watermark"
+            value={state.diagnostics ? agoLabel(state.diagnostics.stepsAccountedUntilMs) : '—'}
+          />
           <Row
             label="warnings"
             value={state.diagnostics ? String(state.diagnostics.warnings.length) : '—'}
