@@ -6,7 +6,7 @@
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "mowa",
-    "userInterfaceStyle": "automatic",
+    "userInterfaceStyle": "light", // light 고정
     "platforms": ["ios", "web"],
     "ios": {
       "bundleIdentifier": "com.mowa.app",
