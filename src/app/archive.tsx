@@ -71,12 +71,22 @@ function openDetail(experienceId: string) {
  * 누적 시간 needs a duration per row and the list response carries none yet
  * (docs/api-implementation.md 공백 8). Summing only when every row has one
  * keeps the number honest and lights it up by itself once the field ships.
+ *
+ * Minutes, not hours: a walk is a half-hour thing, so an archive with a few of
+ * them read `0.6시간` — a unit the reader has to convert back before it means
+ * anything. Every other duration on this screen is already in minutes (the
+ * calendar cells and the month list both call formatDurationMinutes), so the
+ * stat now matches the numbers sitting next to it.
+ *
+ * Not formatDurationMinutes itself: its `Math.max(1, …)` floor exists so one
+ * short walk never reads 0분, and applying that to a SUM would make a loaded
+ * archive of zero-length walks claim 1분.
  */
-function totalHoursLabel(items: WalkExperienceListItem[]): string {
-  if (items.length === 0) return '0시간';
+function totalMinutesLabel(items: WalkExperienceListItem[]): string {
+  if (items.length === 0) return '0분';
   const seconds = items.reduce((sum, item) => sum + (item.durationSeconds ?? 0), 0);
   const complete = items.every((item) => item.durationSeconds != null);
-  return complete ? `${(seconds / 3600).toFixed(1)}시간` : '—';
+  return complete ? `${Math.round(seconds / 60)}분` : '—';
 }
 
 function inPeriod(item: WalkExperienceListItem, period: PeriodFilter, today: KstParts): boolean {
@@ -549,7 +559,7 @@ export default function ArchiveScreen() {
           <View className="w-px bg-line" />
           <Stat value={unknown ? '—' : `${thisMonthCount}회`} label="이번 달" />
           <View className="w-px bg-line" />
-          <Stat value={unknown ? '—' : totalHoursLabel(items)} label="누적 시간" />
+          <Stat value={unknown ? '—' : totalMinutesLabel(items)} label="누적 시간" />
         </View>
 
         <ViewToggle mode={mode} onChange={setMode} />
