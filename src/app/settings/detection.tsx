@@ -100,7 +100,15 @@ export default function DetectionSettingsScreen() {
   const setCooldownSeconds = useDetection((state) => state.setCooldownSeconds);
 
   useEffect(() => {
-    void load();
+    // Opening this screen must not raise a permission dialog. `load()`
+    // reconciles, and reconciling calls `walkDetector.start()` whenever the
+    // stored preference is on while the detector is idle — which raises the
+    // Motion, Always-location and HealthKit prompts at once. The root layout
+    // already runs `load()` once per signed-in session (after the permission
+    // gate), so here the numbers only need refreshing; `load()` stays as the
+    // fallback for the case where that never ran.
+    if (useDetection.getState().phase === 'idle') void load();
+    else void useDetection.getState().refreshDiagnostics();
   }, [load]);
 
   const unavailable = phase === 'unavailable';

@@ -1,6 +1,13 @@
 import { create } from 'zustand';
 
-import { location, storage, walkDetector, type DetectedWalk, type WalkEvent } from '@/adapters';
+import {
+  location,
+  storage,
+  toPermissionState,
+  walkDetector,
+  type DetectedWalk,
+  type WalkEvent,
+} from '@/adapters';
 import { api, hasAccessToken } from '@/api/client';
 import {
   fromIsoDateTime,
@@ -314,6 +321,19 @@ export const useWalkCandidateFlow = create<WalkCandidateFlowState>((set, get) =>
     const stored = await storage.listWalks();
     if (!stored.ok) {
       append(`reconcile: listWalks FAILED — ${stored.error}`);
+      return null;
+    }
+
+    // Issuing the query IS the Motion & Fitness prompt — CoreMotion has no
+    // request API, so there is no way to ask for history without asking for the
+    // permission. /walk calls this on mount, and a cold-start notification tap
+    // deliberately bypasses the permission gate (_layout.tsx), so without this
+    // check the dialog can arrive with no explanation screen in front of it.
+    // Refusing costs only the retrospective upgrade; the live candidate path is
+    // untouched.
+    const motion = await walkDetector.getDiagnostics();
+    if (motion.ok && toPermissionState(motion.value.motionAuthorization) === 'prompt') {
+      append('reconcile: skipped — motion permission not asked yet');
       return null;
     }
 
