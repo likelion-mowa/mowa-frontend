@@ -25,6 +25,50 @@ const ASPECT = 1245 / 880;
 const BUBBLE_HOLD_MS = 2000;
 const BUBBLE_FADE_MS = 400;
 
+type CharacterFigureProps = { width?: number; onPress?: () => void };
+
+/**
+ * The character alone: the image plus the radial ellipse that grounds it. The
+ * permission gate draws this without the wordmark or the tagline, so the two
+ * callers cannot let the artwork drift apart.
+ *
+ * `onPress` exists so CharacterHero can keep its tap-to-speak bubble on the
+ * IMAGE only — wrapping the ellipse too would make the shadow a tap target.
+ */
+export function CharacterFigure({ width = 200, onPress }: CharacterFigureProps) {
+  const image = (
+    <Image
+      source={CHARACTER}
+      style={{ width, height: Math.round(width * ASPECT) }}
+      resizeMode="contain"
+    />
+  );
+  return (
+    <>
+      {onPress === undefined ? (
+        <View accessibilityRole="image" accessibilityLabel="MOWA 캐릭터">
+          {image}
+        </View>
+      ) : (
+        <Pressable accessibilityRole="image" accessibilityLabel="MOWA 캐릭터" onPress={onPress}>
+          {image}
+        </Pressable>
+      )}
+
+      <Svg width={100} height={14} style={{ marginTop: -10 }}>
+        <Defs>
+          <RadialGradient id="groundShadow" cx="50%" cy="50%" rx="50%" ry="50%">
+            <Stop offset="0%" stopColor="#000000" stopOpacity={0.12} />
+            <Stop offset="55%" stopColor="#000000" stopOpacity={0.03} />
+            <Stop offset="80%" stopColor="#000000" stopOpacity={0} />
+          </RadialGradient>
+        </Defs>
+        <Ellipse cx={50} cy={7} rx={50} ry={7} fill="url(#groundShadow)" />
+      </Svg>
+    </>
+  );
+}
+
 type CharacterHeroProps = {
   /** Home uses 200, onboarding 210 (prototype values). */
   width?: number;
@@ -86,24 +130,7 @@ export function CharacterHero({
           </Animated.View>
         ) : null}
 
-        <Pressable accessibilityRole="image" accessibilityLabel="MOWA 캐릭터" onPress={showBubble}>
-          <Image
-            source={CHARACTER}
-            style={{ width, height: Math.round(width * ASPECT) }}
-            resizeMode="contain"
-          />
-        </Pressable>
-
-        <Svg width={100} height={14} style={{ marginTop: -10 }}>
-          <Defs>
-            <RadialGradient id="groundShadow" cx="50%" cy="50%" rx="50%" ry="50%">
-              <Stop offset="0%" stopColor="#000000" stopOpacity={0.12} />
-              <Stop offset="55%" stopColor="#000000" stopOpacity={0.03} />
-              <Stop offset="80%" stopColor="#000000" stopOpacity={0} />
-            </RadialGradient>
-          </Defs>
-          <Ellipse cx={50} cy={7} rx={50} ry={7} fill="url(#groundShadow)" />
-        </Svg>
+        <CharacterFigure width={width} onPress={showBubble} />
       </View>
 
       <Text

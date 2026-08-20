@@ -20,8 +20,7 @@ import {
   WideOption,
 } from '@/components/option-picker';
 import { ScreenHeader } from '@/components/screen-header';
-import { useAnimatedToggle } from '@/lib/animations';
-import { colors } from '@/lib/theme';
+import { StepDots } from '@/components/step-dots';
 import { useDiaryFlow } from '@/stores/diary-flow-store';
 
 /**
@@ -37,29 +36,9 @@ import { useDiaryFlow } from '@/stores/diary-flow-store';
  *
  * Motion mirrors the prototype's CSS transitions via RN Animated: option
  * selection eases over ~220ms (duration-200, in @/components/option-picker),
- * the step dots morph over 300ms (duration-300), and each step's content slides
- * in like the prototype's rail.
+ * the step dots morph over 300ms (duration-300, in @/components/step-dots), and
+ * each step's content slides in like the prototype's rail.
  */
-
-/** Prototype step dots: the active dot widens 6→20 and reached dots turn sage, over 300ms. */
-function StepDot({ reached, active }: { reached: boolean; active: boolean }) {
-  const activeAnim = useAnimatedToggle(active, 300);
-  const reachedAnim = useAnimatedToggle(reached, 300);
-  return (
-    <Animated.View
-      style={{
-        height: 6,
-        borderRadius: 999,
-        marginHorizontal: 2,
-        width: activeAnim.interpolate({ inputRange: [0, 1], outputRange: [6, 20] }),
-        backgroundColor: reachedAnim.interpolate({
-          inputRange: [0, 1],
-          outputRange: [colors.line, colors.sage],
-        }),
-      }}
-    />
-  );
-}
 
 export default function DiaryContextScreen() {
   const walk = useDiaryFlow((state) => state.walk);
@@ -120,16 +99,7 @@ export default function DiaryContextScreen() {
 
   return (
     <SafeAreaView className="flex-1 bg-parchment">
-      <ScreenHeader
-        onBack={handleBack}
-        center={
-          <View className="flex-row items-center">
-            {([1, 2, 3] as const).map((dot) => (
-              <StepDot key={dot} reached={dot <= step} active={dot === step} />
-            ))}
-          </View>
-        }
-      />
+      <ScreenHeader onBack={handleBack} center={<StepDots total={3} current={step} />} />
       <View className="absolute right-4 top-14">
         <Text className="text-[11px] font-medium text-ink-subtle">{step} / 3</Text>
       </View>
