@@ -777,21 +777,47 @@ final class WalkDetectorCore: NSObject {
         let saved = Mechanism(rawValue: UserDefaults.standard.string(forKey: Keys.mechanism) ?? "") ?? .none
         Self.log.notice("restore mechanism=\(saved.rawValue, privacy: .public)")
 
+        // MOWA: startCoreLocationKeepAlive() ends in startMotionUpdates(), and
+        // startActivityUpdates IS the Motion & Fitness prompt — CoreMotion has
+        // no request API, so issuing the query is what raises the dialog. This
+        // function runs from didFinishLaunchingWithOptions, before any JS, so a
+        // restore that reaches it puts that dialog on screen with no
+        // explanation in front of it and nothing in JS able to hold it back
+        // (measured 2026-08-20). Restoring is not worth spending a
+        // once-per-install prompt the user has never been shown a reason for:
+        // the app's permission screen asks with one, and the start() that
+        // follows brings the keepalive back up.
+        //
+        // Only `notDetermined` is refused. A denial has already consumed the
+        // prompt, so restoring then raises nothing and behaves as before.
+        let motionUnasked = CMMotionActivityManager.authorizationStatus() == .notDetermined
+
         switch saved {
         case .coreLocationKeepAlive:
             guard locationManager.authorizationStatus == .authorizedAlways else {
                 Self.log.notice("restore_skipped reason=not-always-authorized")
                 return
             }
+            guard !motionUnasked else {
+                Self.log.notice("restore_skipped reason=motion-not-asked")
+                return
+            }
             startCoreLocationKeepAlive()
         case .healthKitObserver:
+            // No prompt here: registerObserverQuery only executes an
+            // HKObserverQuery. The HealthKit sheet comes from
+            // enableHealthKitObserver's requestAuthorization, which restore
+            // never calls.
             registerObserverQuery()
             isEnabled = true
             mechanism = .healthKitObserver
         case .layered:
-            // MOWA: restore both halves; a missing Always grant degrades to
-            // observer-only rather than dropping the whole layer.
-            if locationManager.authorizationStatus == .authorizedAlways {
+            // MOWA: restore both halves; a missing Always grant — or an unasked
+            // Motion permission — degrades to observer-only rather than
+            // dropping the whole layer.
+            if motionUnasked {
+                Self.log.notice("restore_degraded reason=motion-not-asked keepalive=skipped")
+            } else if locationManager.authorizationStatus == .authorizedAlways {
                 startCoreLocationKeepAlive()
             } else {
                 Self.log.notice("restore_degraded reason=not-always-authorized keepalive=skipped")

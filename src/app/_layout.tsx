@@ -170,6 +170,10 @@ export default function RootLayout() {
 
   const [needsPermissions, setNeedsPermissions] = useState<boolean | null>(null);
   const visitedPermissionsRef = useRef(false);
+  // Keeps the detection reconcile to once per signed-in session: its effect
+  // below depends on `pathname`, so without this it would re-run on every
+  // navigation.
+  const detectionLoadedRef = useRef(false);
 
   // reactCompiler is on: every hook here stays unconditional, so RootLayout
   // never returns early.
@@ -233,6 +237,7 @@ export default function RootLayout() {
     if (!signedIn) {
       setNeedsPermissions(null);
       visitedPermissionsRef.current = false;
+      detectionLoadedRef.current = false;
       return;
     }
     if (hasInitialTap === null) return;
@@ -251,13 +256,24 @@ export default function RootLayout() {
       // reads the status without prompting.
       walkDetector.getDiagnostics(),
       notifications.getPermission(),
-    ]).then(([locationResult, motionResult, notificationResult]) => {
-      if (cancelled) return;
-      const locationPrompt = locationResult.ok && locationResult.value.foreground === 'prompt';
-      const motionPrompt = motionResult.ok && motionResult.value.motionAuthorization === 'prompt';
-      const notificationPrompt = notificationResult.ok && notificationResult.value === 'prompt';
-      setNeedsPermissions(locationPrompt || motionPrompt || notificationPrompt);
-    });
+    ])
+      .then(([locationResult, motionResult, notificationResult]) => {
+        if (cancelled) return;
+        const locationPrompt = locationResult.ok && locationResult.value.foreground === 'prompt';
+        const motionPrompt =
+          motionResult.ok && motionResult.value.motionAuthorization === 'prompt';
+        const notificationPrompt = notificationResult.ok && notificationResult.value === 'prompt';
+        setNeedsPermissions(locationPrompt || motionPrompt || notificationPrompt);
+      })
+      .catch((error: unknown) => {
+        // No adapter is meant to throw, but a rejection would leave
+        // needsPermissions null forever — which parks the app under the opaque
+        // overlay below AND now also never reconciles detection, since that
+        // effect waits on this one. Undecidable means let them through.
+        if (cancelled) return;
+        console.log(`[MOWA] permission gate read FAILED — ${String(error)}`);
+        setNeedsPermissions(false);
+      });
     return () => {
       cancelled = true;
     };
@@ -265,16 +281,39 @@ export default function RootLayout() {
 
   // The detect → candidate flow runs app-wide but is useless without a session:
   // a detection with no token cannot become a server candidate. On web the
-  // subscription is a no-op by design.
+  // subscription is a no-op by design. It raises no permission prompt, so it
+  // does not wait for the gate below.
   useEffect(() => {
     if (!signedIn) return;
-    const unsubscribe = useWalkCandidateFlow.getState().startCandidateFlow();
-    // Reconciles the stored detection preference against what the detector is
-    // actually doing. Here because this is the only place that knows the app
-    // just booted, and it must not run before there is a session.
-    void useDetection.getState().load();
-    return unsubscribe;
+    return useWalkCandidateFlow.getState().startCandidateFlow();
   }, [signedIn]);
+
+  /**
+   * Reconciles the stored detection preference against what the detector is
+   * actually doing — once per signed-in session, and only after the permission
+   * gate is out of the way.
+   *
+   * Split out of the effect above and delayed on purpose. `load()` ends in
+   * `walkDetector.start()` whenever the stored preference is on, and `start()`
+   * raises the Motion, Always-location and HealthKit dialogs itself. Running it
+   * on sign-in put those on screen on top of /permissions step 1, before the
+   * user had pressed 확인 on anything — measured on a device. The Keychain
+   * survives app deletion, so a reinstall still carries detectionEnabled=true
+   * and reproduces it; that is why it looked intermittent.
+   *
+   * "Out of the way" is either branch: the gate decided not to run
+   * (`needsPermissions === false`), or it ran and the user has left it.
+   */
+  useEffect(() => {
+    if (!signedIn) return;
+    if (detectionLoadedRef.current) return;
+    const gateSettled =
+      needsPermissions === false ||
+      (visitedPermissionsRef.current && pathname !== '/permissions');
+    if (!gateSettled) return;
+    detectionLoadedRef.current = true;
+    void useDetection.getState().load();
+  }, [signedIn, needsPermissions, pathname]);
 
   return (
     <>
